@@ -1,0 +1,98 @@
+{
+  "total_cards": 124,
+  "promo_cards": 12,
+  "parallel_cards": 0,
+  "cards_with_names": 124,
+  "cards_with_costs": 124,
+  "cards_with_abilities": 124,
+  "card_types": [
+    "ふれんど",
+    "サポート",
+    "フィールド"
+  ],
+  "colors": [
+    "黄",
+    "緑",
+    "青",
+    "無",
+    "赤"
+  ],
+  "rarities": [
+    "R",
+    "SECパラレル",
+    "C",
+    "SEC",
+    "SR",
+    "SRパラレル",
+    "Rパラレル",
+    "U"
+  ],
+  "sample_cards": [
+    {
+      "number": "F-013 (P)",
+      "name": "るくそー",
+      "rarity": "R",
+      "cost": {
+        "total": 4,
+        "red": 1,
+        "blue": 0,
+        "yellow": 0,
+        "green": 0,
+        "colorless": 0
+      },
+      "color": "赤",
+      "type": "ふれんど",
+      "attribute": "獣",
+      "emotion": "愛",
+      "power": 5000,
+      "ability": "このふれんどがブロックした時、自分の負のエネルギーエリアのカード1枚を表にする。",
+      "image_url": "https://mememe-tcg.com/assets/images/card/F-013-P_R_Red.jpg",
+      "is_promo": true,
+      "is_parallel": false
+    },
+    {
+      "number": "F-015 (P)",
+      "name": "ティラノちゃん",
+      "rarity": "R",
+      "cost": {
+        "total": 5,
+        "red": 1,
+        "blue": 0,
+        "yellow": 0,
+        "green": 0,
+        "colorless": 0
+      },
+      "color": "赤",
+      "type": "ふれんど",
+      "attribute": "恐竜",
+      "emotion": "楽",
+      "power": 7000,
+      "ability": "このふれんどは登場したターンにアタックできる。",
+      "image_url": "https://mememe-tcg.com/assets/images/card/F-015-P_R_Red.jpg",
+      "is_promo": true,
+      "is_parallel": false
+    },
+    {
+      "number": "F-016 (P)",
+      "name": "くらげ坊",
+      "rarity": "SR",
+      "cost": {
+        "total": 6,
+        "red": 1,
+        "blue": 0,
+        "yellow": 0,
+        "green": 0,
+        "colorless": 0
+      },
+      "color": "赤",
+      "type": "ふれんど",
+      "attribute": "霊",
+      "emotion": "悲",
+      "power": 8000,
+      "ability": "自分の負のエネルギーエリアの表のカードが3枚以上の間、このふれんどの与えるダメージ+1。",
+      "image_url": "https://mememe-tcg.com/assets/images/card/F-016-P_SR_Red.jpg",
+      "is_promo": true,
+      "is_parallel": false
+    }
+  ]
+}

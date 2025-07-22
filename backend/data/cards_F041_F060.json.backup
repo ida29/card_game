@@ -1,0 +1,403 @@
+{
+  "cards": [
+    {
+      "number": "F-041",
+      "name": "ハヤオ",
+      "type": "Friend",
+      "rarity": "C",
+      "cost": {
+        "total": 3,
+        "colored": 1,
+        "colorless": 2,
+        "yellow": 1
+      },
+      "power": 5000,
+      "color": "Yellow",
+      "attribute": "Machine",
+      "emotion": "Grudge",
+      "effect": "このふれんどが登場した時、自分の手札からコスト2以下のフィールドカード1枚をコストを支払わずに出すことができる。",
+      "flavorText": "機械的な動きがクール。頭にバリアがあって、どんな攻撃も跳ね返しちゃう！",
+      "height": "36cm",
+      "weight": "4.7kg"
+    },
+    {
+      "number": "F-042",
+      "name": "うっきー",
+      "type": "Friend",
+      "rarity": "C",
+      "cost": {
+        "total": 3,
+        "colored": 2,
+        "colorless": 1,
+        "yellow": 2
+      },
+      "power": 5000,
+      "color": "Yellow",
+      "attribute": "Yokai",
+      "emotion": "Shame",
+      "effect": "このふれんどが登場した時、自分のトラッシュから3枚選び、デッキの上か下に1枚ずつ置くことができる。【メイン: コスト000】このふれんどをレストさせることで、自分の他のふれんど全てをアクティブにする。",
+      "flavorText": "猿に似ていて、いたずら好きな一面も。バナナの皮を投げて、相手を滑らせる！",
+      "height": "26cm",
+      "weight": "2.9kg"
+    },
+    {
+      "number": "F-043",
+      "name": "メガロッコ",
+      "type": "Friend",
+      "rarity": "R",
+      "cost": {
+        "total": 3,
+        "colored": 2,
+        "colorless": 1,
+        "yellow": 2
+      },
+      "power": 5000,
+      "color": "Yellow",
+      "attribute": "Monster",
+      "emotion": "Pride",
+      "effect": "ブロックできない。相手のふれんどの効果を受けない。",
+      "flavorText": "小さな体に６つの目が可愛くパチパチ。でっかくなってエスパー能力で戦うのが夢！",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-044",
+      "name": "うっきー",
+      "type": "Friend",
+      "rarity": "R",
+      "cost": {
+        "total": 5,
+        "colored": 2,
+        "colorless": 3,
+        "yellow": 2
+      },
+      "power": 8000,
+      "color": "Yellow",
+      "attribute": "Yokai",
+      "emotion": "Shame",
+      "effect": "このふれんどがアタックした時、自分のネガティブエネルギー置き場からカード1枚を捨てることができる。",
+      "flavorText": "うっきーはバナナが大好きだけど、猿扱いされるのは大嫌い！",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-045",
+      "name": "FM94.3",
+      "type": "Friend",
+      "rarity": "U",
+      "cost": {
+        "total": 5,
+        "colored": 2,
+        "colorless": 3,
+        "yellow": 2
+      },
+      "power": 8000,
+      "color": "Yellow",
+      "attribute": "Machine",
+      "emotion": "Pride",
+      "effect": "【メイン: コスト黄黄緑緑】自分のフィールドからフィールドカード1枚を捨てて、同じ色のふれんどカード1枚を自分のエネルギー置き場からコストを支払わずに召喚する。",
+      "flavorText": "自身の体でラジオ電波を受信できるふれんど。夜はラジオを聴きながら日記を書いている。",
+      "height": "30cm",
+      "weight": "13.3kg"
+    },
+    {
+      "number": "F-046",
+      "name": "ピンヒール",
+      "type": "Friend",
+      "rarity": "U",
+      "cost": {
+        "total": 5,
+        "colored": 2,
+        "colorless": 3,
+        "yellow": 2
+      },
+      "power": 6000,
+      "color": "Yellow",
+      "attribute": "Monster",
+      "emotion": "Joy",
+      "effect": "このふれんどが登場した時、自分のネガティブエネルギー置き場からカード1枚を捨てる。",
+      "flavorText": "スパイ活動に長けたふれんど。尖ったヒールのような足で壁を垂直に歩くことができる。",
+      "height": "28cm",
+      "weight": "3.3kg"
+    },
+    {
+      "number": "F-047",
+      "name": "だんぼー",
+      "type": "Friend",
+      "rarity": "R",
+      "cost": {
+        "total": 5,
+        "colored": 2,
+        "colorless": 3,
+        "yellow": 2
+      },
+      "power": 5000,
+      "color": "Yellow",
+      "attribute": "Yokai",
+      "emotion": "Fear",
+      "effect": "このふれんどが登場した時、相手のフィールドカード1枚を選び、捨てる。",
+      "flavorText": "雨の日に現れる妖怪。傘を持った人を襲うが、本当は傘を返してほしいだけ。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-048",
+      "name": "ハヤオ",
+      "type": "Friend",
+      "rarity": "SR",
+      "cost": {
+        "total": 6,
+        "colored": 3,
+        "colorless": 3,
+        "yellow": 3
+      },
+      "power": 7000,
+      "color": "Yellow",
+      "attribute": "Machine",
+      "emotion": "Grudge",
+      "effect": "このふれんどが登場した時、自分の手札からコスト2以下のフィールドカード1枚をコストを支払わずに出すことができる。このふれんどがアタックした時、相手のふれんど1体に3000ダメージを与える。",
+      "flavorText": "巨大化したハヤオ。機械的な動きと圧倒的なパワーで敵を粉砕する！",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-049",
+      "name": "バナナスリップ",
+      "type": "Support",
+      "rarity": "C",
+      "cost": {
+        "total": 1,
+        "colored": 1,
+        "colorless": 0,
+        "yellow": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【カウンター】相手のふれんど1体を選ぶ。このターン中、そのふれんどはアタックできない。",
+      "flavorText": "バナナの皮で演足を滑らせる古典的ないたずら。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-050",
+      "name": "ラジオ放送",
+      "type": "Support",
+      "rarity": "U",
+      "cost": {
+        "total": 2,
+        "colored": 1,
+        "colorless": 1,
+        "yellow": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】自分のデッキの上から3枚見て、その中から1枚を手札に加え、残りをデッキの下に置く。",
+      "flavorText": "FM94.3から流れる情報は、ふれんどたちにとって重要な情報源。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-051",
+      "name": "機械工場",
+      "type": "Field",
+      "rarity": "R",
+      "cost": {
+        "total": 3,
+        "colored": 2,
+        "colorless": 1,
+        "yellow": 2
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "自分の機械属性のふれんどのパワー+1000。",
+      "flavorText": "機械属性のふれんどたちが集まる工場。常に新しいパーツが作られている。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-052",
+      "name": "アクティベート",
+      "type": "Support",
+      "rarity": "C",
+      "cost": {
+        "total": 1,
+        "colored": 0,
+        "colorless": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】自分のレストしているふれんど1体をアクティブにする。",
+      "flavorText": "機械を起動させるスイッチ。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-053",
+      "name": "メカニックブースト",
+      "type": "Support",
+      "rarity": "U",
+      "cost": {
+        "total": 3,
+        "colored": 2,
+        "colorless": 1,
+        "yellow": 2
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン/カウンター】このターン中、自分の機械属性のふれんど全てのパワー+3000。",
+      "flavorText": "機械の力を最大限に引き出すブースト装置。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-054",
+      "name": "ショートサーキット",
+      "type": "Item",
+      "rarity": "C",
+      "cost": {
+        "total": 2,
+        "colored": 1,
+        "colorless": 1,
+        "yellow": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】相手の機械属性のふれんど1体を破壊する。",
+      "flavorText": "機械に対して特に効果的な電気ショック装置。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-055",
+      "name": "エレクトロフィールド",
+      "type": "Field",
+      "rarity": "U",
+      "cost": {
+        "total": 2,
+        "colored": 1,
+        "colorless": 1,
+        "yellow": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "相手の機械属性のふれんどのパワー-1000。",
+      "flavorText": "電気が流れるフィールド。機械にとっては動きにくい環境。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-056",
+      "name": "リペアキット",
+      "type": "Support",
+      "rarity": "R",
+      "cost": {
+        "total": 3,
+        "colored": 1,
+        "colorless": 2,
+        "yellow": 1
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】自分のトラッシュから機械属性のふれんど1体を選び、コストを支払わずに召喚する。",
+      "flavorText": "壊れた機械を修復するための道具セット。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-057",
+      "name": "オーバーロード",
+      "type": "Support",
+      "rarity": "U",
+      "cost": {
+        "total": 4,
+        "colored": 2,
+        "colorless": 2,
+        "yellow": 2
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】自分のふれんど1体を選ぶ。このターン中、そのふれんどは2回アタックできる。",
+      "flavorText": "機械の性能を限界を超えて引き出す。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-058",
+      "name": "マシンガン",
+      "type": "Item",
+      "rarity": "R",
+      "cost": {
+        "total": 4,
+        "colored": 2,
+        "colorless": 2,
+        "yellow": 2
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】相手のふれんど3体までにそれぞれ2000ダメージを与える。",
+      "flavorText": "高速連射が可能な機関銃。一瞬で敵を蜂の巣にする。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-059",
+      "name": "ファクトリー",
+      "type": "Field",
+      "rarity": "SR",
+      "cost": {
+        "total": 4,
+        "colored": 3,
+        "colorless": 1,
+        "yellow": 3
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "自分の黄色のふれんどのパワー+2000。自分のターン開始時、自分のエネルギー置き場からカード1枚を手札に加えることができる。",
+      "flavorText": "巨大な機械工場。黄色の力の源泉。",
+      "height": null,
+      "weight": null
+    },
+    {
+      "number": "F-060",
+      "name": "システムクラッシュ",
+      "type": "Support",
+      "rarity": "SR",
+      "cost": {
+        "total": 5,
+        "colored": 3,
+        "colorless": 2,
+        "yellow": 3
+      },
+      "power": null,
+      "color": "Yellow",
+      "attribute": null,
+      "emotion": null,
+      "effect": "【メイン】全ての機械属性のふれんどを破壊する。",
+      "flavorText": "全ての機械システムを停止させる禁断のプログラム。",
+      "height": null,
+      "weight": null
+    }
+  ]
+}

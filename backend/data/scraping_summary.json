@@ -1,0 +1,23 @@
+{
+  "total_cards": 124,
+  "promo_cards": 12,
+  "parallel_cards": 0,
+  "card_types": [
+    "ふれんど",
+    "サポート",
+    "フィールド"
+  ],
+  "colors": [
+    "黄",
+    "赤",
+    "青",
+    "緑"
+  ],
+  "rarities": [
+    "SR",
+    "SEC",
+    "R",
+    "U",
+    "C"
+  ]
+}

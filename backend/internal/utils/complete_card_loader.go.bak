@@ -1,0 +1,211 @@
+package utils
+
+import (
+	"encoding/json"
+	"log"
+	"mememe-tcg/internal/database"
+	"mememe-tcg/internal/models"
+	"os"
+	"strings"
+)
+
+type CompleteCardData struct {
+	CardNumber    string      `json:"number"`
+	Name          string      `json:"name"`
+	Type          string      `json:"type"`
+	Rarity        string      `json:"rarity"`
+	Cost          CostData    `json:"cost"`
+	Power         *int        `json:"power,omitempty"`
+	Color         string      `json:"color"`
+	Attribute     string      `json:"attribute,omitempty"`
+	Emotion       string      `json:"emotion,omitempty"`
+	Effect        string      `json:"effect"`
+	FlavorText    string      `json:"flavorText"`
+	Height        string      `json:"height,omitempty"`
+	Weight        string      `json:"weight,omitempty"`
+}
+
+type CostData struct {
+	Total     int `json:"total"`
+	Colored   int `json:"colored"`
+	Colorless int `json:"colorless"`
+	Red       int `json:"red,omitempty"`
+	Blue      int `json:"blue,omitempty"`
+	Yellow    int `json:"yellow,omitempty"`
+	Green     int `json:"green,omitempty"`
+}
+
+func LoadCompleteCardData() error {
+	log.Println("Loading complete card data from official sources...")
+	
+	// List of all card data files
+	dataFiles := []string{
+		"data/mememe_cards_f001_f020.json",
+		"data/cards_F021_F040.json",
+		"data/cards_F041_F060.json", 
+		"data/cards_F061_F080.json",
+		"data/cards_F081_F102.json",
+	}
+	
+	// Also load image data
+	imageData, err := loadCardJSON("data/card_data.json")
+	if err != nil {
+		log.Printf("Warning: Failed to load image data: %v", err)
+	}
+	
+	// Create image map
+	imageMap := make(map[string]models.CardJSON)
+	for _, img := range imageData {
+		cardNo := strings.Split(img.Number, " ")[0]
+		imageMap[cardNo] = img
+	}
+	
+	db := database.GetDB()
+	totalCards := 0
+	
+	for _, file := range dataFiles {
+		cards, err := loadCompleteCardFile(file)
+		if err != nil {
+			log.Printf("Error loading %s: %v", file, err)
+			continue
+		}
+		
+		for _, cardData := range cards {
+			card := convertToModel(cardData, imageMap)
+			
+			// Check if card exists
+			var existingCard models.Card
+			result := db.Where("card_no = ?", card.CardNo).First(&existingCard)
+			if result.Error == nil {
+				// Update existing card
+				db.Model(&existingCard).Updates(&card)
+			} else {
+				// Create new card
+				db.Create(&card)
+			}
+			totalCards++
+		}
+	}
+	
+	log.Printf("Loaded %d complete cards into database", totalCards)
+	return nil
+}
+
+func loadCompleteCardFile(filepath string) ([]CompleteCardData, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	
+	// Try to decode as array first
+	var cards []CompleteCardData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&cards)
+	if err == nil {
+		return cards, nil
+	}
+	
+	// If that fails, try to decode as object with "cards" field
+	file.Seek(0, 0) // Reset file position
+	var wrapper struct {
+		Cards []CompleteCardData `json:"cards"`
+	}
+	decoder = json.NewDecoder(file)
+	err = decoder.Decode(&wrapper)
+	if err != nil {
+		return nil, err
+	}
+	return wrapper.Cards, nil
+}
+
+func convertToModel(data CompleteCardData, imageMap map[string]models.CardJSON) models.Card {
+	card := models.Card{
+		CardNo:     data.CardNumber,
+		Name:       data.Name,
+		Cost:       data.Cost.Total,
+		Effect:     data.Effect,
+		FlavorText: data.FlavorText,
+	}
+	
+	// Set type
+	switch data.Type {
+	case "Friend", "ふれんど":
+		card.Type = models.CardTypeFriend
+	case "Support", "サポート":
+		card.Type = models.CardTypeSupport
+	case "Field", "フィールド":
+		card.Type = models.CardTypeField
+	}
+	
+	// Set color
+	switch data.Color {
+	case "Red", "赤":
+		card.Color = models.ColorRed
+	case "Blue", "青":
+		card.Color = models.ColorBlue
+	case "Yellow", "黄":
+		card.Color = models.ColorYellow
+	case "Green", "緑":
+		card.Color = models.ColorGreen
+	default:
+		card.Color = models.ColorRed // Default
+	}
+	
+	// Set rarity
+	switch data.Rarity {
+	case "C":
+		card.Rarity = models.RarityC
+	case "U":
+		card.Rarity = models.RarityU
+	case "R":
+		card.Rarity = models.RarityR
+	case "SR":
+		card.Rarity = models.RaritySR
+	case "SEC", "UR":
+		card.Rarity = models.RaritySEC
+	}
+	
+	// Set power if applicable
+	if data.Power != nil {
+		card.Power = *data.Power
+	}
+	
+	// Add physical stats to flavor text if available
+	if data.Height != "" || data.Weight != "" {
+		stats := []string{}
+		if data.Height != "" {
+			stats = append(stats, "身長: " + data.Height)
+		}
+		if data.Weight != "" {
+			stats = append(stats, "体重: " + data.Weight)
+		}
+		if len(stats) > 0 {
+			card.FlavorText = card.FlavorText + "\n" + strings.Join(stats, " / ")
+		}
+	}
+	
+	// Set attribute and emotion as energy icons (temporary solution)
+	if data.Attribute != "" {
+		card.EnergyIcons = append(card.EnergyIcons, data.Attribute)
+	}
+	if data.Emotion != "" {
+		card.EnergyIcons = append(card.EnergyIcons, data.Emotion)
+	}
+	
+	// Check for counter abilities
+	if strings.Contains(data.Effect, "【カウンター】") {
+		card.IsCounter = true
+	}
+	if strings.Contains(data.Effect, "【メイン/カウンター】") {
+		card.IsMainCounter = true
+	}
+	
+	// Add image data if available
+	if imgData, exists := imageMap[data.CardNumber]; exists {
+		card.ImageURL = imgData.ImageURL
+		card.LocalImagePath = imgData.LocalImagePath
+	}
+	
+	return card
+}
