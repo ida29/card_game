@@ -104,7 +104,7 @@
             <img
               :src="getCardImageUrl(card)"
               :alt="card.name"
-              class="w-full aspect-[2/3] object-cover rounded mb-1"
+              class="w-full aspect-[2/3] object-cover rounded-lg mb-1"
             />
             <p class="text-white text-[10px] font-bold truncate">{{ card.name }}</p>
             <p class="text-gray-400 text-[10px]">{{ card.type }}</p>
@@ -138,9 +138,9 @@
               v-if="deckCard.card"
               :src="getCardImageUrl(deckCard.card)"
               :alt="deckCard.card.name"
-              class="w-full aspect-[2/3] object-cover rounded mb-1"
+              class="w-full aspect-[2/3] object-cover rounded-lg mb-1"
             />
-            <div v-else class="w-full aspect-[2/3] bg-gray-700 rounded mb-1 flex items-center justify-center">
+            <div v-else class="w-full aspect-[2/3] bg-gray-700 rounded-lg mb-1 flex items-center justify-center">
               <span class="text-gray-500 text-[10px]">No Image</span>
             </div>
             <p class="text-white text-[10px] font-bold truncate">{{ deckCard.card?.name || 'Unknown' }}</p>

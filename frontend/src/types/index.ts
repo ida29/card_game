@@ -21,6 +21,7 @@ export interface Card {
   image_url: string
   local_image_path: string
   energy_icons?: string[]
+  energy_value?: number
   is_counter: boolean
   is_main_counter: boolean
   is_promo?: boolean

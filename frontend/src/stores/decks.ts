@@ -69,10 +69,26 @@ export const useDeckStore = defineStore('decks', () => {
       })
       decks.value.push(newDeck)
       currentDeck.value = newDeck
+      // Save to localStorage
+      localStorage.setItem('mememe_decks', JSON.stringify(decks.value))
       return newDeck
     } catch (err: any) {
-      error.value = err.message || 'Failed to create deck'
-      throw err
+      console.log('API failed, creating local deck:', err)
+      // Fallback: Create deck locally
+      const newDeck: Deck = {
+        ID: Date.now(), // Use timestamp as ID
+        name,
+        user_id: 1,
+        cards: [],
+        is_active: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      decks.value.push(newDeck)
+      currentDeck.value = newDeck
+      // Save to localStorage
+      localStorage.setItem('mememe_decks', JSON.stringify(decks.value))
+      return newDeck
     } finally {
       loading.value = false
     }
@@ -97,9 +113,23 @@ export const useDeckStore = defineStore('decks', () => {
       if (currentDeck.value?.ID === deck.ID) {
         currentDeck.value = updatedDeck
       }
+      // Save to localStorage
+      localStorage.setItem('mememe_decks', JSON.stringify(decks.value))
       return updatedDeck
     } catch (err: any) {
-      error.value = err.message || 'Failed to update deck'
+      console.log('API update failed, updating locally:', err)
+      // Fallback: Update deck locally
+      const index = decks.value.findIndex(d => d.ID === deck.ID)
+      if (index !== -1) {
+        deck.updated_at = new Date().toISOString()
+        decks.value[index] = { ...deck }
+        if (currentDeck.value?.ID === deck.ID) {
+          currentDeck.value = { ...deck }
+        }
+        // Save to localStorage
+        localStorage.setItem('mememe_decks', JSON.stringify(decks.value))
+        return deck
+      }
       throw err
     } finally {
       loading.value = false
@@ -200,6 +230,30 @@ export const useDeckStore = defineStore('decks', () => {
     console.log('Deck cleared, remaining cards:', currentDeck.value.cards.length)
   }
 
+  async function loadDecks() {
+    try {
+      // Try to load from localStorage first
+      const savedDecks = localStorage.getItem('mememe_decks')
+      if (savedDecks) {
+        const parsedDecks = JSON.parse(savedDecks)
+        console.log('Loaded decks from localStorage:', parsedDecks)
+        decks.value = parsedDecks
+      }
+      
+      // Also try to fetch from server
+      try {
+        await fetchUserDecks()
+        console.log('Fetched decks from server:', decks.value)
+      } catch (fetchError) {
+        console.log('Could not fetch from server, using local decks only:', fetchError)
+      }
+    } catch (error) {
+      console.error('Error loading decks:', error)
+      // Initialize with empty array if all else fails
+      decks.value = []
+    }
+  }
+
   return {
     decks,
     currentDeck,
@@ -216,5 +270,6 @@ export const useDeckStore = defineStore('decks', () => {
     addCardToDeck,
     removeCardFromDeck,
     clearCurrentDeck,
+    loadDecks,
   }
 })

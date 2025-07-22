@@ -123,8 +123,8 @@
             <img
               :src="getCardImageUrl(selectedCard)"
               :alt="selectedCard.name"
-              class="max-w-full h-auto rounded-lg shadow-2xl"
-              style="max-height: 70vh;"
+              class="max-w-full h-auto shadow-2xl"
+              style="max-height: 70vh; border-radius: 2rem;"
             />
           </div>
           

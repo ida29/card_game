@@ -105,7 +105,7 @@
           <div class="flex justify-between items-center">
             <div>
               <h3 class="text-lg font-bold text-white">{{ deck.name }}</h3>
-              <p class="text-sm text-gray-400">{{ deck.cards.length }}枚</p>
+              <p class="text-sm text-gray-400">{{ getDeckCardCount(deck) }}枚</p>
             </div>
             <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -125,7 +125,8 @@
     </div>
     
     <div v-else-if="gameMode === 'battle'">
-      <BattleField />
+      <GameStart v-if="!gameReady" @game-ready="handleGameReady" />
+      <BattleField v-else />
     </div>
   </div>
 </template>
@@ -134,22 +135,42 @@
 import { ref, computed, onMounted } from 'vue'
 import { useDeckStore } from '@/stores/decks'
 import { useGameStore } from '@/stores/game'
-import type { Deck } from '@/types'
+import { useCardStore } from '@/stores/cards'
+import type { Deck, DeckCard } from '@/types'
 import BattleField from '@/components/game/BattleField.vue'
+import GameStart from '@/components/game/GameStart.vue'
 
 const deckStore = useDeckStore()
 const gameStore = useGameStore()
+const cardStore = useCardStore()
 
 const gameMode = ref<null | 'pvp' | 'cpu' | 'cpu-difficulty' | 'deck-selection' | 'battle'>(null)
 const battleMode = ref<null | 'pvp' | 'cpu'>(null)
 const selectedDeck = ref<Deck | null>(null)
+const gameReady = ref(false)
+
+const getDeckCardCount = (deck: Deck) => {
+  return deck.cards?.reduce((sum, card) => sum + (card.quantity || 1), 0) || 0
+}
 
 const availableDecks = computed(() => {
-  return deckStore.decks.filter(deck => deck.cards.length >= 40)
+  console.log('All decks:', deckStore.decks)
+  deckStore.decks.forEach((deck, index) => {
+    console.log(`Deck ${index}: ${deck.name}, cards:`, getDeckCardCount(deck))
+  })
+  
+  // Count total cards considering quantity
+  return deckStore.decks.filter(deck => {
+    const totalCards = getDeckCardCount(deck)
+    console.log(`Deck ${deck.name}: ${totalCards} total cards`)
+    return totalCards >= 40
+  })
 })
 
-onMounted(() => {
-  deckStore.loadDecks()
+onMounted(async () => {
+  await deckStore.loadDecks()
+  // Load all cards for CPU deck generation
+  await cardStore.fetchAllCards()
 })
 
 const selectMode = (mode: 'pvp' | 'cpu') => {
@@ -162,19 +183,53 @@ const selectMode = (mode: 'pvp' | 'cpu') => {
 }
 
 const selectDifficulty = (difficulty: 'easy' | 'normal' | 'hard') => {
+  console.log('selectDifficulty called:', { difficulty, battleMode: battleMode.value })
   gameStore.setCPUDifficulty(difficulty)
   gameMode.value = 'deck-selection'
+  console.log('After selectDifficulty:', { gameMode: gameMode.value, battleMode: battleMode.value })
 }
 
 const selectDeck = (deck: Deck) => {
+  console.log('selectDeck called:', { deck, battleMode: battleMode.value })
   selectedDeck.value = deck
+  gameReady.value = false // Reset game ready state
   gameMode.value = 'battle'
+  console.log('About to call startBattle with:', { selectedDeck: !!selectedDeck.value, battleMode: battleMode.value, gameReady: gameReady.value })
   startBattle()
 }
 
 const startBattle = () => {
-  if (!selectedDeck.value || !battleMode.value) return
+  console.log('startBattle called:', { selectedDeck: selectedDeck.value, battleMode: battleMode.value })
+  if (!selectedDeck.value || !battleMode.value) {
+    console.error('Cannot start battle - missing requirements:', { 
+      hasSelectedDeck: !!selectedDeck.value, 
+      hasBattleMode: !!battleMode.value 
+    })
+    return
+  }
   
-  gameStore.initializeGame(battleMode.value, selectedDeck.value.cards)
+  // Expand deck cards based on quantity
+  const expandedDeck: DeckCard[] = []
+  selectedDeck.value.cards.forEach(deckCard => {
+    for (let i = 0; i < (deckCard.quantity || 1); i++) {
+      expandedDeck.push({
+        ...deckCard,
+        quantity: 1
+      })
+    }
+  })
+  
+  console.log('Expanded deck size:', expandedDeck.length)
+  
+  // Initialize game but don't start phases yet
+  gameStore.initializeGame(battleMode.value, expandedDeck, false)
+}
+
+const handleGameReady = () => {
+  console.log('handleGameReady called - about to start game phases')
+  // Start the actual game phases after janken
+  gameStore.startGame()
+  gameReady.value = true
+  console.log('Game ready set to true, should now show BattleField')
 }
 </script>

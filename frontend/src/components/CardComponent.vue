@@ -3,11 +3,11 @@
     class="card relative overflow-hidden transform transition-all duration-300 hover:scale-105 cursor-pointer"
     @click="$emit('card-click', card)"
   >
-    <div class="aspect-[2/3] overflow-hidden rounded-t-lg">
+    <div class="aspect-[2/3] overflow-hidden rounded-lg">
       <img 
         :src="cardImageUrl"
         :alt="card.name"
-        class="w-full h-full object-cover"
+        class="w-full h-full object-cover rounded-lg"
         @error="onImageError"
       />
     </div>
