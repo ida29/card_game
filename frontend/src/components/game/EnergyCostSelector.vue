@@ -92,7 +92,9 @@
                     v-for="(energy, index) in availableRegularEnergy"
                     :key="`regular-${index}`"
                     class="energy-option"
-                    :class="{ 'selected': energy.selected }"
+                    :class="{ 
+                      'selected': energy.selected
+                    }"
                     @click="toggleRegularEnergy(index)"
                   >
                     <GameCard
@@ -255,8 +257,8 @@ const canConfirm = computed(() => {
     selectedEnergy.value.yellow >= costs.value.yellow &&
     selectedEnergy.value.green >= costs.value.green
   
-  // Check if total cost is satisfied
-  const totalSatisfied = totalSelectedValue.value >= totalCost.value
+  // Check if total cost is exactly satisfied (not more, not less)
+  const totalSatisfied = totalSelectedValue.value === totalCost.value
   
   return colorsSatisfied && totalSatisfied
 })
@@ -276,11 +278,47 @@ watch(() => props.show, (show) => {
 })
 
 const toggleRegularEnergy = (index: number) => {
-  availableRegularEnergy.value[index].selected = !availableRegularEnergy.value[index].selected
+  const energy = availableRegularEnergy.value[index]
+  const energyValue = energy.card.card.energy_value || 1
+  const color = energy.card.card.color
+  
+  if (!energy.selected) {
+    // Check if selecting this would exceed the total cost
+    if (totalSelectedValue.value + energyValue > totalCost.value) {
+      console.log('Cannot select: would exceed total cost')
+      return
+    }
+    
+    // Check if selecting this would exceed color requirements
+    if (color === '赤' && selectedEnergy.value.red + energyValue > costs.value.red + costs.value.colorless) return
+    if (color === '青' && selectedEnergy.value.blue + energyValue > costs.value.blue + costs.value.colorless) return
+    if (color === '黄' && selectedEnergy.value.yellow + energyValue > costs.value.yellow + costs.value.colorless) return
+    if (color === '緑' && selectedEnergy.value.green + energyValue > costs.value.green + costs.value.colorless) return
+  }
+  
+  energy.selected = !energy.selected
 }
 
 const toggleNegativeEnergy = (index: number) => {
-  availableNegativeEnergy.value[index].selected = !availableNegativeEnergy.value[index].selected
+  const negEnergy = availableNegativeEnergy.value[index]
+  const energyValue = negEnergy.card.card.energy_value || 1
+  const color = negEnergy.card.card.color
+  
+  if (!negEnergy.selected) {
+    // Check if selecting this would exceed the total cost
+    if (totalSelectedValue.value + energyValue > totalCost.value) {
+      console.log('Cannot select: would exceed total cost')
+      return
+    }
+    
+    // Check if selecting this would exceed color requirements
+    if (color === '赤' && selectedEnergy.value.red + energyValue > costs.value.red + costs.value.colorless) return
+    if (color === '青' && selectedEnergy.value.blue + energyValue > costs.value.blue + costs.value.colorless) return
+    if (color === '黄' && selectedEnergy.value.yellow + energyValue > costs.value.yellow + costs.value.colorless) return
+    if (color === '緑' && selectedEnergy.value.green + energyValue > costs.value.green + costs.value.colorless) return
+  }
+  
+  negEnergy.selected = !negEnergy.selected
 }
 
 const getColorClass = (color: string) => {

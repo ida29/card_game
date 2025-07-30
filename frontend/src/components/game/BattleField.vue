@@ -132,6 +132,43 @@
       @cancel="gameStore?.cancelEnergyCostSelection"
     />
     </template>
+    
+    <!-- Drawn Card Display -->
+    <transition name="drawn-card-fade">
+      <div 
+        v-if="gameStore.drawnCardDisplay.show && gameStore.drawnCardDisplay.card"
+        class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+        style="pointer-events: none;"
+      >
+        <div class="drawn-card-container">
+          <div class="draw-effect-text">DRAW!</div>
+          <img 
+            :src="getCardImageUrl(gameStore.drawnCardDisplay.card.card)"
+            :alt="gameStore.drawnCardDisplay.card.card.name"
+            class="drawn-card-image"
+          />
+          <div class="card-name-label">{{ gameStore.drawnCardDisplay.card.card.name }}</div>
+        </div>
+      </div>
+    </transition>
+    
+    <!-- Action Choice Modal -->
+    <ActionChoiceModal
+      :show="gameStore.actionChoice.show"
+      :friend-state="gameStore.actionChoice.friendState"
+      :friend-index="gameStore.actionChoice.friendIndex"
+      @choose-attack="gameStore.executeActionChoice('attack')"
+      @choose-main-effect="gameStore.executeActionChoice('main-effect')"
+      @cancel="gameStore.cancelActionChoice"
+    />
+    
+    <!-- Main Phase Action Modal -->
+    <MainPhaseActionModal
+      :show="gameStore.mainPhaseAction.show"
+      :friend-state="gameStore.mainPhaseAction.friendState"
+      @use-main-effect="gameStore.executeMainPhaseAction"
+      @cancel="gameStore.cancelMainPhaseAction"
+    />
   </div>
 </template>
 
@@ -148,6 +185,8 @@ import BattleAnimation from './BattleAnimation.vue'
 import BlockingDecision from './BlockingDecision.vue'
 import CounterSelection from './CounterSelection.vue'
 import EnergyCostSelector from './EnergyCostSelector.vue'
+import ActionChoiceModal from './ActionChoiceModal.vue'
+import MainPhaseActionModal from './MainPhaseActionModal.vue'
 
 const gameStore = useGameStore()
 const router = useRouter()
@@ -160,7 +199,7 @@ const currentPhase = computed(() => gameStore.currentPhase)
 const turnCount = computed(() => gameStore.turnCount)
 const canEndTurn = computed(() => currentPhase.value === 'end' || currentPhase.value === 'main')
 const showBattleEffect = ref(false)
-const energyPlayedThisTurn = computed(() => gameStore.energyPlayedThisTurn)
+const energyPlayedThisTurn = computed(() => gameStore.energyPlayedThisTurn || { player: false, opponent: false })
 
 // Safe access to energyCostSelection
 const energyCostSelection = computed(() => {
@@ -198,8 +237,12 @@ const handleRematch = () => {
 }
 
 const handleReturnToMenu = () => {
-  gameStore.resetGame()
+  // Navigate first, then reset to avoid the initialization screen
   router.push('/game')
+  // Reset after navigation to clean up state
+  setTimeout(() => {
+    gameStore.resetGame()
+  }, 100)
 }
 
 const getOpponentCardStyle = (index: number, totalCards: number) => {
@@ -214,6 +257,13 @@ const getOpponentCardStyle = (index: number, totalCards: number) => {
     zIndex: index
   }
 }
+
+const getCardImageUrl = (card: any) => {
+  if (card.local_image_path) {
+    return `/api/v1/images/${card.local_image_path.replace('card_images/', '')}`
+  }
+  return card.image_url || '/placeholder-card.svg'
+}
 </script>
 
 <style scoped>
@@ -221,6 +271,93 @@ const getOpponentCardStyle = (index: number, totalCards: number) => {
   background-image: 
     radial-gradient(ellipse at top, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
     radial-gradient(ellipse at bottom, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+}
+
+/* Drawn Card Display */
+.drawn-card-container {
+  position: relative;
+  animation: draw-card-appear 0.5s ease-out;
+}
+
+.draw-effect-text {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 48px;
+  font-weight: bold;
+  color: #fbbf24;
+  text-shadow: 
+    0 0 20px rgba(251, 191, 36, 0.8),
+    0 0 40px rgba(251, 191, 36, 0.6),
+    2px 2px 4px rgba(0, 0, 0, 0.8);
+  animation: draw-text-pulse 1s ease-in-out;
+}
+
+.drawn-card-image {
+  width: 300px;
+  height: 420px;
+  object-fit: cover;
+  border-radius: 16px;
+  box-shadow: 
+    0 0 30px rgba(255, 255, 255, 0.5),
+    0 10px 40px rgba(0, 0, 0, 0.8);
+  animation: card-glow 2s ease-in-out;
+}
+
+.card-name-label {
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  padding: 8px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+/* Animations */
+@keyframes draw-card-appear {
+  from {
+    transform: scale(0) rotate(180deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes draw-text-pulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.2);
+  }
+}
+
+@keyframes card-glow {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2) drop-shadow(0 0 20px rgba(255, 255, 255, 0.8));
+  }
+}
+
+/* Transition */
+.drawn-card-fade-enter-active,
+.drawn-card-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.drawn-card-fade-enter-from,
+.drawn-card-fade-leave-to {
+  opacity: 0;
 }
 
 .opponent-hand-top .hand-cards {

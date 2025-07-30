@@ -51,7 +51,7 @@ watch([currentPhase, isPlayerTurn, playerHand, playerEnergy], () => {
       break
       
     case 'energy':
-      helpMessage.value = 'エネルギーをセットできます'
+      helpMessage.value = 'エネルギーをセットしてください'
       helpSubMessage.value = '手札からカードを掴んでエネルギーエリアにドラッグ＆ドロップ（1枚まで）'
       helpIcon.value = '⚡'
       break
@@ -79,7 +79,7 @@ watch([currentPhase, isPlayerTurn, playerHand, playerEnergy], () => {
         helpIcon.value = '😅'
       } else {
         helpMessage.value = 'ふれんどで攻撃！'
-        helpSubMessage.value = '緑の枠のふれんどをクリックして攻撃'
+        helpSubMessage.value = '緑の枠のふれんどをクリックして攻撃（アタック時効果は自動発動）'
         helpIcon.value = '⚔️'
       }
       break

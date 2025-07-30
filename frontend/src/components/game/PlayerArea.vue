@@ -3,10 +3,8 @@
     <div 
       class="player-area" 
       :class="{ 
-        'opponent': isOpponent,
-        'attack-target': isOpponent && gameStore.selectedAttacker !== null
+        'opponent': isOpponent
       }"
-      @click="handleFieldClick"
     >
     <!-- Player Info -->
     <div class="player-info flex justify-between items-center mb-2">
@@ -49,6 +47,7 @@
                   'just-played': isJustPlayed(index - 1)
                 }"
                 @click="handleFriendClick(index - 1)"
+                @contextmenu.prevent="handleFriendRightClick(index - 1)"
                 @dblclick="showFullScreenCard(player.friends[index - 1].card.card)"
               >
                 <GameCard 
@@ -56,6 +55,7 @@
                   :size="'small'"
                   :selected="gameStore.selectedAttacker === index - 1 && !isOpponent"
                   :tapped="player.friends[index - 1].tapped"
+                  :effective-power="gameStore.getEffectivePower(player.friends[index - 1], isOpponent ? 'opponent' : 'player')"
                 />
                 <!-- Just Played Indicator -->
                 <div 
@@ -108,11 +108,14 @@
         <!-- Negative Energy Area (above deck) -->
         <div class="negative-energy-zone mb-1">
           <h4 class="text-gray-400 text-xs mb-1">負のエネルギー</h4>
-          <div class="bg-purple-900/30 rounded-lg p-1 border border-purple-600/50 flex items-center justify-center min-h-[40px]">
+          <div 
+            class="bg-purple-900/30 rounded-lg p-2 border border-purple-600/50 flex items-center justify-center min-h-[60px] cursor-pointer hover:bg-purple-900/40 transition-colors"
+            @click="showNegativeEnergyList"
+          >
             <div v-if="!player?.negativeEnergy || player.negativeEnergy.length === 0" class="text-purple-400 text-xs">
               空
             </div>
-            <div v-else class="relative h-16 w-24">
+            <div v-else class="relative" :style="{ height: `${Math.max(80, 28 + (player.negativeEnergy.length - 1) * 14)}px`, width: '96px' }">
               <!-- Display all negative energy cards individually -->
               <div 
                 v-for="(negativeCard, index) in player.negativeEnergy"
@@ -120,11 +123,11 @@
                 class="absolute cursor-pointer transition-all duration-200"
                 :class="{ 'opacity-60': !negativeCard.faceUp }"
                 :style="{
-                  top: `${index * 3}px`,
-                  left: `${index * 3}px`,
+                  top: `${index * 14}px`,
+                  left: '0',
                   zIndex: index
                 }"
-                @click="handleNegativeEnergyClick(index)"
+                @click.stop="handleNegativeEnergyClick(index)"
                 @contextmenu.prevent="flipNegativeEnergy(index)"
               >
                 <div class="transform rotate-90 origin-center">
@@ -136,9 +139,9 @@
                   <!-- Face-down card back -->
                   <div 
                     v-else
-                    class="w-20 h-28 bg-gradient-to-br from-purple-800 to-purple-900 rounded-lg border-2 border-purple-600 flex items-center justify-center"
+                    class="w-20 h-28 bg-black rounded-lg border-2 border-gray-600 flex items-center justify-center"
                   >
-                    <span class="text-purple-300 text-xs font-bold">裏</span>
+                    <span class="text-gray-400 text-xs font-bold">裏</span>
                   </div>
                 </div>
               </div>
@@ -170,7 +173,10 @@
         <!-- Trash Area (below deck) -->
         <div class="trash-zone" style="margin-top: 12px;">
           <h4 class="text-gray-400 text-xs mb-1">トラッシュ</h4>
-          <div class="bg-gray-800/50 rounded-lg p-2 flex items-center justify-center">
+          <div 
+            class="bg-gray-800/50 rounded-lg p-2 flex items-center justify-center cursor-pointer hover:bg-gray-800/60 transition-colors"
+            @click="showTrashList"
+          >
             <div class="relative">
               <!-- Maintain card size even when empty -->
               <div v-if="player?.graveyard.length === 0" class="w-20 h-28 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center">
@@ -178,7 +184,7 @@
               </div>
               <div v-else class="relative">
                 <!-- Show top card of trash -->
-                <div @click="showFullScreenCard(player.graveyard[player.graveyard.length - 1].card)">
+                <div>
                   <GameCard 
                     v-if="player.graveyard[player.graveyard.length - 1]"
                     :card="player.graveyard[player.graveyard.length - 1].card" 
@@ -272,6 +278,23 @@
         </div>
       </div>
     </teleport>
+    
+    <!-- Card List Modal for Trash -->
+    <CardListModal
+      :show="showingTrash"
+      title="トラッシュ"
+      :cards="player?.graveyard || []"
+      @close="showingTrash = false"
+    />
+    
+    <!-- Card List Modal for Negative Energy -->
+    <CardListModal
+      :show="showingNegativeEnergy"
+      title="負のエネルギー"
+      :cards="player?.negativeEnergy || []"
+      :is-negative-energy="true"
+      @close="showingNegativeEnergy = false"
+    />
     </div>
   </div>
 </template>
@@ -281,6 +304,7 @@ import { ref, computed } from 'vue'
 import { useGameStore } from '@/stores/game'
 import type { PlayerState, Card, DeckCard } from '@/types'
 import GameCard from './GameCard.vue'
+import CardListModal from './CardListModal.vue'
 
 const props = defineProps<{
   player: PlayerState | undefined
@@ -299,6 +323,8 @@ const fullScreenCard = ref<Card | null>(null)
 const draggingCardIndex = ref<number | null>(null)
 const isDraggingOverBattle = ref(false)
 const isDraggingOverEnergy = ref(false)
+const showingTrash = ref(false)
+const showingNegativeEnergy = ref(false)
 
 const canPlayCards = computed(() => 
   !props.isOpponent && gameStore.canPlayCards
@@ -351,12 +377,13 @@ const canPlayCard = (deckCard: DeckCard) => {
 const canAttack = (index: number) => {
   if (!props.player?.friends[index]) return false
   const friend = props.player.friends[index]
+  const cardNo = friend.card.card?.card_no
   
   return !props.isOpponent && 
          gameStore.currentPhase === 'main' && 
          gameStore.isPlayerTurn &&
          !friend.tapped && // Can't attack if already tapped
-         friend.playedTurn < gameStore.turnCount // Can't attack on the turn it was played
+         (friend.playedTurn < gameStore.turnCount || (cardNo && gameStore.canAttackImmediately(cardNo))) // Can attack if played before this turn OR has immediate attack ability
 }
 
 const isJustPlayed = (index: number) => {
@@ -364,12 +391,6 @@ const isJustPlayed = (index: number) => {
   const friend = props.player.friends[index]
   return friend.playedTurn === gameStore.turnCount
 }
-
-const canTargetPlayer = computed(() => {
-  return props.isOpponent &&
-         gameStore.selectedAttacker !== null &&
-         gameStore.availableTargets.includes(-1)
-})
 
 const selectCard = (index: number) => {
   // Only select card for viewing, don't play it
@@ -400,28 +421,21 @@ const handleFriendClick = (index: number) => {
   }
 }
 
-const handlePlayerClick = () => {
-  if (canTargetPlayer.value) {
-    gameStore.executeBattle('player')
-  }
+const handleFieldClick = () => {
+  // Field clicks no longer needed for attacks
 }
 
-const handleFieldClick = () => {
-  // Only allow field clicks for opponent's area when we can target the player
-  if (props.isOpponent && canTargetPlayer.value) {
-    gameStore.executeBattle('player')
-  }
+const handleFriendRightClick = (index: number) => {
+  const friend = props.player?.friends[index]
+  if (!friend || props.isOpponent) return
+  
+  // Right-click is disabled for now to avoid confusion
+  // Main phase effects are accessed through the action choice modal
 }
 
 const handleNegativeEnergyClick = (index: number) => {
-  if (!props.player?.negativeEnergy[index]) return
-  
-  const negativeCard = props.player.negativeEnergy[index]
-  if (negativeCard.faceUp) {
-    // Show face-up card in full screen
-    showFullScreenCard(negativeCard.card.card)
-  }
-  // Face-down cards cannot be inspected
+  // Do nothing - negative energy cards should not expand
+  return
 }
 
 const flipNegativeEnergy = (index: number) => {
@@ -432,6 +446,18 @@ const flipNegativeEnergy = (index: number) => {
   // Can only flip face-up cards to face-down (to use as energy)
   if (negativeCard.faceUp) {
     gameStore.flipNegativeEnergyCard(index)
+  }
+}
+
+const showTrashList = () => {
+  if (props.player?.graveyard && props.player.graveyard.length > 0) {
+    showingTrash.value = true
+  }
+}
+
+const showNegativeEnergyList = () => {
+  if (props.player?.negativeEnergy && props.player.negativeEnergy.length > 0) {
+    showingNegativeEnergy.value = true
   }
 }
 
@@ -498,6 +524,14 @@ const handleDragOverBattle = (event: DragEvent) => {
       const availableEnergyValue = props.player?.energy
         .filter(e => !e.tapped)
         .reduce((sum, e) => sum + (e.card.card.energy_value || 1), 0) || 0
+      
+      console.log('handleDragOverBattle:', {
+        cardName: card.card.name,
+        cardType: card.card.type,
+        totalCost,
+        availableEnergyValue,
+        canAfford: availableEnergyValue >= totalCost
+      })
       
       if (availableEnergyValue >= totalCost) {
         event.preventDefault()

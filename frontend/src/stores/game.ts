@@ -29,6 +29,11 @@ interface FriendCardState {
   card: DeckCard
   tapped: boolean
   playedTurn: number // Track which turn this friend was played
+  temporaryBoosts?: Array<{
+    amount: number
+    duration: 'turn' | 'permanent'
+    turnApplied: number
+  }>
 }
 
 interface NegativeEnergyCardState {
@@ -58,6 +63,46 @@ interface GameState {
   winner: 'player' | 'opponent' | null
 }
 
+// Effect-related interfaces
+interface EffectStackItem {
+  source: string
+  description: string
+  player: number
+}
+
+interface PersistentEffect {
+  cardNo: string
+  description: string
+  isActive: boolean
+}
+
+interface EffectUpdate {
+  stack?: EffectStackItem[]
+  persistent?: PersistentEffect[]
+  animation?: {
+    type: string
+    text: string
+  }
+}
+
+interface TargetSelection {
+  effectSource: string
+  validTargets: Array<{
+    type: string
+    id: string
+    location: string
+    data?: any
+  }>
+  requirements: {
+    minTargets: number
+    maxTargets: number
+    targetTypes: string[]
+    mandatory: boolean
+    description: string
+  }
+  callback: (targets: any[]) => void
+}
+
 export const useGameStore = defineStore('game', () => {
   const battleMode = ref<BattleMode | null>(null)
   const cpuDifficulty = ref<CPUDifficulty>('normal')
@@ -72,6 +117,12 @@ export const useGameStore = defineStore('game', () => {
   const availableTargets = ref<number[]>([])
   const cpuThinkingTime = ref(2500) // Increased base thinking time
   const energyPlayedThisTurn = ref<{player: boolean, opponent: boolean}>({player: false, opponent: false})
+  
+  // Effect-related state
+  const effectUpdates = ref<EffectUpdate | null>(null)
+  const targetSelection = ref<TargetSelection | null>(null)
+  const effectStack = ref<EffectStackItem[]>([])
+  const persistentEffects = ref<PersistentEffect[]>([])
   
   // Blocking decision state
   const blockingDecision = ref<{
@@ -101,6 +152,12 @@ export const useGameStore = defineStore('game', () => {
     defenderDefeated: false
   })
   
+  // Drawn card display state
+  const drawnCardDisplay = ref<{
+    show: boolean
+    card: DeckCard | null
+  }>({ show: false, card: null })
+  
   // Counter decision state
   const counterDecision = ref<{
     show: boolean
@@ -114,6 +171,28 @@ export const useGameStore = defineStore('game', () => {
     resolve: null
   })
 
+  // Action choice state (for cards with main phase effects)
+  const actionChoice = ref<{
+    show: boolean
+    friendIndex: number
+    friendState: FriendCardState | null
+  }>({
+    show: false,
+    friendIndex: -1,
+    friendState: null
+  })
+  
+  // Main phase action state
+  const mainPhaseAction = ref<{
+    show: boolean
+    friendIndex: number
+    friendState: FriendCardState | null
+  }>({
+    show: false,
+    friendIndex: -1,
+    friendState: null
+  })
+  
   // Energy cost selection state
   const energyCostSelection = ref<{
     show: boolean
@@ -175,9 +254,9 @@ export const useGameStore = defineStore('game', () => {
 
     console.log('Game state initialized')
     
-    // Draw initial hands for both players
-    drawCards('player', 5)
-    drawCards('opponent', 5)
+    // Draw initial hands for both players (without animation)
+    drawCards('player', 5, false)
+    drawCards('opponent', 5, false)
     
     if (startPhases) {
       startGame()
@@ -215,14 +294,24 @@ export const useGameStore = defineStore('game', () => {
     }, 1000)
   }
 
-  function drawCards(player: 'player' | 'opponent', count: number) {
+  async function drawCards(player: 'player' | 'opponent', count: number, showAnimation: boolean = true) {
     if (!gameState.value) return
     
     const playerState = gameState.value.players[player]
+    const drawnCards: DeckCard[] = []
+    
     for (let i = 0; i < count; i++) {
       if (playerState.deck.length > 0) {
         const card = playerState.deck.shift()!
         playerState.hand.push(card)
+        drawnCards.push(card)
+      }
+    }
+    
+    // Show draw animation and card preview for player only
+    if (player === 'player' && drawnCards.length > 0 && showAnimation) {
+      for (const card of drawnCards) {
+        await showDrawnCard(card)
       }
     }
   }
@@ -304,32 +393,59 @@ export const useGameStore = defineStore('game', () => {
     const card = playerState.hand[cardIndex]
     const cardData = card.card
     
+    console.log('playCard called:', {
+      cardName: cardData.name,
+      cardType: cardData.type,
+      targetZone,
+      currentPhase: currentPhase.value,
+      cardCost: cardData.cost || 0
+    })
+    
     // Determine target zone based on card type if not specified
     if (!targetZone && currentPhase.value === 'main') {
       switch (cardData.type) {
         case 'ふれんど':
           targetZone = 'friends'
+          console.log('Card type is ふれんど, setting targetZone to friends')
           break
         case 'サポート':
-          return playSupport(player, cardIndex)
+          return await playSupport(player, cardIndex)
         case 'フィールド':
-          return playField(player, cardIndex)
+          return await playField(player, cardIndex)
       }
     }
     
     if (targetZone === 'friends') {
-      if (playerState.friends.length >= 10) return false
-      
-      // Check and pay cost
-      if (!(await payCost(player, cardData))) {
+      console.log('Attempting to play friend card to battle area')
+      if (playerState.friends.length >= 10) {
+        console.log('Cannot play friend: battle area is full')
         return false
       }
       
+      // Check and pay cost
+      console.log('Checking if player can pay cost...')
+      const canPay = await payCost(player, cardData)
+      console.log('payCost result:', canPay)
+      if (!canPay) {
+        console.log('Cannot play friend: unable to pay cost or payment cancelled')
+        return false
+      }
+      
+      console.log('Adding friend to battle area:', cardData.name)
       playerState.friends.push({
         card: card,
         tapped: false,
         playedTurn: turnCount.value
       })
+      console.log('Friend added successfully. Total friends:', playerState.friends.length)
+      
+      // Remove card from hand
+      playerState.hand.splice(cardIndex, 1)
+      
+      // Trigger friend played effects
+      await triggerCardEffect(cardData, 'on_play', player)
+      
+      return true
     } else if (targetZone === 'energy') {
       // Debug logging for energy setting
       console.log('Attempting to set energy:', {
@@ -369,7 +485,7 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
   
-  function playSupport(player: 'player' | 'opponent', cardIndex: number): boolean {
+  async function playSupport(player: 'player' | 'opponent', cardIndex: number): Promise<boolean> {
     if (!gameState.value) return false
     
     const playerState = gameState.value.players[player]
@@ -387,9 +503,12 @@ export const useGameStore = defineStore('game', () => {
       return false
     }
     
-    // TODO: Execute support card effect
+    // Execute support card effect
     console.log(`Playing support card: ${cardData.name}`)
-    console.log(`Effect: ${cardData.effect}`)
+    console.log(`Effect: ${cardData.effect}`)  
+    
+    // Trigger support effects
+    await triggerCardEffect(cardData, 'main', player)
     
     // Move to trash after effect
     playerState.graveyard.push(card)
@@ -398,7 +517,7 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
   
-  function playField(player: 'player' | 'opponent', cardIndex: number): boolean {
+  async function playField(player: 'player' | 'opponent', cardIndex: number): Promise<boolean> {
     if (!gameState.value) return false
     
     const playerState = gameState.value.players[player]
@@ -427,6 +546,9 @@ export const useGameStore = defineStore('game', () => {
     
     console.log(`Playing field card: ${cardData.name}`)
     
+    // Trigger field card effects
+    await triggerCardEffect(cardData, 'persistent', player)
+    
     return true
   }
   
@@ -436,7 +558,22 @@ export const useGameStore = defineStore('game', () => {
     const playerState = gameState.value.players[player]
     const totalCost = cardData.cost || 0
     
-    if (totalCost === 0) return true
+    console.log('payCost called:', {
+      player,
+      cardName: cardData.name,
+      totalCost,
+      colorCosts: {
+        red: cardData.cost_red || 0,
+        blue: cardData.cost_blue || 0,
+        yellow: cardData.cost_yellow || 0,
+        green: cardData.cost_green || 0
+      }
+    })
+    
+    if (totalCost === 0) {
+      console.log('Card has 0 cost, returning true')
+      return true
+    }
     
     // Check if we can pay the cost first
     if (!canPayCost(player, cardData)) {
@@ -475,6 +612,19 @@ export const useGameStore = defineStore('game', () => {
     const untappedEnergy = playerState.energy.filter(e => !e.tapped)
     const faceUpNegativeEnergy = playerState.negativeEnergy.filter(ne => ne.faceUp)
     
+    console.log('canPayCost - Available energy:', {
+      untappedEnergyCount: untappedEnergy.length,
+      faceUpNegativeEnergyCount: faceUpNegativeEnergy.length,
+      untappedEnergyDetails: untappedEnergy.map(e => ({
+        color: e.card.card.color,
+        value: e.card.card.energy_value || 1
+      })),
+      negativeEnergyDetails: faceUpNegativeEnergy.map(ne => ({
+        color: ne.card.card.color,
+        value: ne.card.card.energy_value || 1
+      }))
+    })
+    
     // Calculate color requirements
     const colorRequirements = {
       red: cardData.cost_red || 0,
@@ -495,7 +645,14 @@ export const useGameStore = defineStore('game', () => {
           return sum + (source.card.card.energy_value || 1)
         }, 0)
         
+        console.log(`Color requirement check for ${colorKey} (${colorName}):`, {
+          required,
+          available: totalOfColor,
+          hasEnough: totalOfColor >= required
+        })
+        
         if (totalOfColor < required) {
+          console.log(`Insufficient ${colorName} energy: need ${required}, have ${totalOfColor}`)
           return false
         }
       }
@@ -507,7 +664,14 @@ export const useGameStore = defineStore('game', () => {
       ...faceUpNegativeEnergy
     ].reduce((sum, source) => sum + (source.card.card.energy_value || 1), 0)
     
-    return totalAvailable >= totalCost
+    const result = totalAvailable >= totalCost
+    console.log('canPayCost result:', {
+      totalCost,
+      totalAvailable,
+      canPay: result
+    })
+    
+    return result
   }
   
   function getColorName(colorKey: string): string {
@@ -540,6 +704,64 @@ export const useGameStore = defineStore('game', () => {
     })
   }
   
+  function canPayColorRequirements(player: 'player' | 'opponent', cardData: Card, alreadyUsed: number = 0): boolean {
+    if (!gameState.value) return false
+    
+    const playerState = gameState.value.players[player]
+    const totalCost = cardData.cost || 0
+    
+    // Get available energy sources
+    const untappedEnergy = playerState.energy.filter(e => !e.tapped)
+    const faceUpNegativeEnergy = playerState.negativeEnergy.filter(ne => ne.faceUp)
+    
+    const getEnergyValue = (energy: EnergyCardState) => energy.card.card.energy_value || 1
+    const getNegativeEnergyValue = (negEnergy: NegativeEnergyCardState) => negEnergy.card.card.energy_value || 1
+    
+    // Check color requirements
+    const colorRequirements = {
+      '赤': cardData.cost_red || 0,
+      '青': cardData.cost_blue || 0,
+      '黄': cardData.cost_yellow || 0,
+      '緑': cardData.cost_green || 0
+    }
+    
+    // Count available energy by color
+    const availableByColor: {[key: string]: number} = {
+      '赤': 0,
+      '青': 0,
+      '黄': 0,
+      '緑': 0
+    }
+    
+    untappedEnergy.forEach(e => {
+      const color = e.card.card.color
+      if (color && availableByColor[color] !== undefined) {
+        availableByColor[color] += getEnergyValue(e)
+      }
+    })
+    
+    faceUpNegativeEnergy.forEach(ne => {
+      const color = ne.card.card.color
+      if (color && availableByColor[color] !== undefined) {
+        availableByColor[color] += getNegativeEnergyValue(ne)
+      }
+    })
+    
+    // Check if we have enough of each color
+    for (const [color, required] of Object.entries(colorRequirements)) {
+      if (required > 0 && availableByColor[color] < required) {
+        return false
+      }
+    }
+    
+    // Check total energy (considering already used energy)
+    let totalAvailable = 0
+    untappedEnergy.forEach(e => totalAvailable += getEnergyValue(e))
+    faceUpNegativeEnergy.forEach(ne => totalAvailable += getNegativeEnergyValue(ne))
+    
+    return totalAvailable >= totalCost + alreadyUsed
+  }
+  
   function payCostAutomatically(player: 'player' | 'opponent', cardData: Card): boolean {
     // Use the existing automatic payment logic for CPU
     if (!gameState.value) return false
@@ -560,6 +782,33 @@ export const useGameStore = defineStore('game', () => {
       '青': cardData.cost_blue || 0,
       '黄': cardData.cost_yellow || 0,
       '緑': cardData.cost_green || 0
+    }
+    
+    // First, check if we have enough of each required color
+    for (const [color, required] of Object.entries(colorRequirements)) {
+      if (required > 0) {
+        const regularColorEnergy = untappedEnergy.filter(e => e.card.card.color === color)
+        const negativeColorEnergy = faceUpNegativeEnergy.filter(ne => ne.card.card.color === color)
+        
+        let colorTotal = 0
+        regularColorEnergy.forEach(e => colorTotal += getEnergyValue(e))
+        negativeColorEnergy.forEach(ne => colorTotal += getNegativeEnergyValue(ne))
+        
+        if (colorTotal < required) {
+          console.log(`CPU cannot pay cost: needs ${required} ${color} but only has ${colorTotal}`)
+          return false
+        }
+      }
+    }
+    
+    // Check if we have enough total energy
+    let totalEnergyAvailable = 0
+    untappedEnergy.forEach(e => totalEnergyAvailable += getEnergyValue(e))
+    faceUpNegativeEnergy.forEach(ne => totalEnergyAvailable += getNegativeEnergyValue(ne))
+    
+    if (totalEnergyAvailable < totalCost) {
+      console.log(`CPU cannot pay cost: needs ${totalCost} total but only has ${totalEnergyAvailable}`)
+      return false
     }
     
     let costRemaining = totalCost
@@ -621,11 +870,11 @@ export const useGameStore = defineStore('game', () => {
       case 'start':
         currentPhase.value = 'draw'
         // Handle draw phase automatically
-        setTimeout(() => {
-          // First player doesn't draw on their first turn
-          const isFirstPlayerFirstTurn = turnCount.value === 0 && currentPlayer.value === 'player'
-          if (!isFirstPlayerFirstTurn) {
-            drawCards(currentPlayer.value, 1)
+        setTimeout(async () => {
+          // The player who goes first doesn't draw on turn 0
+          const isFirstTurn = turnCount.value === 0
+          if (!isFirstTurn) {
+            await drawCards(currentPlayer.value, 1)
           }
           
           // Move to energy phase
@@ -659,8 +908,12 @@ export const useGameStore = defineStore('game', () => {
         currentPhase.value = 'main'
         break
       case 'main':
-        currentPhase.value = 'end'
-        endTurn()
+        // Only auto-progress for CPU
+        if (currentPlayer.value === 'opponent' && battleMode.value === 'cpu') {
+          currentPhase.value = 'end'
+          endTurn()
+        }
+        // Player must manually end turn
         break
       case 'end':
         endTurn()
@@ -683,6 +936,17 @@ export const useGameStore = defineStore('game', () => {
         }
       }
     }
+    
+    // Clean up expired temporary boosts before switching turns
+    const currentPlayerState = gameState.value.players[currentPlayer.value]
+    currentPlayerState.friends.forEach(friend => {
+      if (friend.temporaryBoosts) {
+        // Remove turn-based boosts that have expired
+        friend.temporaryBoosts = friend.temporaryBoosts.filter(boost => 
+          boost.duration !== 'turn' || boost.turnApplied === turnCount.value
+        )
+      }
+    })
     
     currentPlayer.value = currentPlayer.value === 'player' ? 'opponent' : 'player'
     gameState.value.currentPlayer = currentPlayer.value
@@ -723,9 +987,11 @@ export const useGameStore = defineStore('game', () => {
     
     const turnTimeout = setTimeout(() => {
       console.error('CPU turn timeout - forcing end turn')
-      currentPhase.value = 'end'
-      nextPhase()
-    }, 10000) // 10 second timeout
+      if (currentPhase.value !== 'end' && currentPlayer.value === 'opponent') {
+        currentPhase.value = 'end'
+        endTurn()
+      }
+    }, 30000) // 30 second timeout to allow for multiple attacks
     
     // Wait for main phase before making decisions
     const waitForMainPhase = setInterval(() => {
@@ -778,6 +1044,14 @@ export const useGameStore = defineStore('game', () => {
           
           const cost = card.cost || 1
           if (energyUsed + cost <= availableEnergy && cpu.friends.length < 10) {
+            // Check if we can actually pay the color requirements
+            const canAfford = canPayColorRequirements('opponent', card, energyUsed)
+            
+            if (!canAfford) {
+              console.log(`CPU skipping ${card.name} - cannot pay color requirements`)
+              continue
+            }
+            
             // Strategic decision: Play stronger cards when player has more friends
             const shouldPlay = 
               player.friends.length > cpu.friends.length || // We're behind
@@ -803,14 +1077,18 @@ export const useGameStore = defineStore('game', () => {
             // End turn after a delay
             setTimeout(() => {
               clearTimeout(turnTimeout)
-              currentPhase.value = 'end'
-              nextPhase()
+              if (currentPhase.value === 'main' && currentPlayer.value === 'opponent') {
+                currentPhase.value = 'end'
+                endTurn()
+              }
             }, cpuThinkingTime.value)
           } catch (error) {
             console.error('Error in CPU turn:', error)
             clearTimeout(turnTimeout)
-            currentPhase.value = 'end'
-            nextPhase()
+            if (currentPhase.value !== 'end' && currentPlayer.value === 'opponent') {
+              currentPhase.value = 'end'
+              endTurn()
+            }
           }
         }, cpuThinkingTime.value)
       }
@@ -900,13 +1178,14 @@ export const useGameStore = defineStore('game', () => {
     const cpuAttackers = cpu.friends.map((friend, index) => ({
       index,
       card: friend.card.card,
-      power: friend.card.card?.power || 0,
+      power: getEffectivePower(friend, 'opponent'),
+      friendState: friend,
       tapped: friend.tapped,
       playedTurn: friend.playedTurn
     })).filter(attacker => 
       attacker.power > 0 && 
       !attacker.tapped && 
-      attacker.playedTurn < turnCount.value // Can't attack on the turn it was played
+      (attacker.playedTurn < turnCount.value || canAttackImmediately(attacker.card.card_no)) // Can attack if played before this turn OR has immediate attack ability
     )
     
     // Perform strategic analysis
@@ -943,6 +1222,9 @@ export const useGameStore = defineStore('game', () => {
         
         // Friends can only attack the player directly
         await performBattle('opponent', attacker.index, 'player')
+        
+        // Wait for battle to complete and add delay between attacks
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
   }
@@ -962,6 +1244,9 @@ export const useGameStore = defineStore('game', () => {
       // Friends can only attack the player directly
       // The player will get a chance to block
       await performBattle('opponent', attacker.index, 'player')
+      
+      // Wait for battle to complete and add delay between attacks
+      await new Promise(resolve => setTimeout(resolve, 2500))
     }
   }
   
@@ -995,6 +1280,9 @@ export const useGameStore = defineStore('game', () => {
       // In hard mode, CPU attacks with strongest friends first
       // to pressure the player into difficult blocking decisions
       await performBattle('opponent', attacker.index, 'player')
+      
+      // Wait for battle to complete and add delay between attacks
+      await new Promise(resolve => setTimeout(resolve, 2000))
     }
   }
 
@@ -1021,17 +1309,50 @@ export const useGameStore = defineStore('game', () => {
       return generateBasicCPUDeck()
     }
     
+    // Choose two colors for the CPU deck
+    const colors = ['赤', '青', '黄', '緑']
+    const selectedColors = []
+    
+    // Randomly select two colors
+    const firstColor = colors[Math.floor(Math.random() * colors.length)]
+    selectedColors.push(firstColor)
+    const remainingColors = colors.filter(c => c !== firstColor)
+    const secondColor = remainingColors[Math.floor(Math.random() * remainingColors.length)]
+    selectedColors.push(secondColor)
+    
+    console.log(`CPU deck colors: ${firstColor} and ${secondColor}`)
+    
+    // Filter cards by the selected colors (including colorless cards)
+    const validCards = allCards.filter(c => {
+      // Include cards that are one of our selected colors
+      if (selectedColors.includes(c.color)) return true
+      
+      // Include colorless cards (cards with no specific color requirement)
+      const hasColorRequirement = (c.cost_red || 0) + (c.cost_blue || 0) + 
+                                  (c.cost_yellow || 0) + (c.cost_green || 0) > 0
+      if (!hasColorRequirement && c.cost > 0) return true
+      
+      return false
+    })
+    
     // Separate cards by type and cost
-    const friendCards = allCards.filter(c => c.type === 'ふれんど' && c.power && c.power > 0)
+    const friendCards = validCards.filter(c => c.type === 'ふれんど' && c.power && c.power > 0)
     const lowCostFriends = friendCards.filter(c => c.cost <= 1)
     const midCostFriends = friendCards.filter(c => c.cost === 2)
     const highCostFriends = friendCards.filter(c => c.cost >= 3)
-    const supportCards = allCards.filter(c => c.type === 'サポート')
-    const fieldCards = allCards.filter(c => c.type === 'フィールド')
+    const supportCards = validCards.filter(c => c.type === 'サポート')
+    const fieldCards = validCards.filter(c => c.type === 'フィールド')
     
     // Build a balanced deck
-    // 15 energy cards (use low-cost friends as energy)
-    const energyCards = [...lowCostFriends, ...midCostFriends].slice(0, 15)
+    // 15 energy cards - balance between the two colors
+    const energyColor1 = [...lowCostFriends, ...midCostFriends].filter(c => c.color === firstColor)
+    const energyColor2 = [...lowCostFriends, ...midCostFriends].filter(c => c.color === secondColor)
+    
+    // Try to get 7-8 cards of each color for energy
+    const selectedEnergyColor1 = selectRandomCards(energyColor1, 8)
+    const selectedEnergyColor2 = selectRandomCards(energyColor2, 7)
+    const energyCards = [...selectedEnergyColor1, ...selectedEnergyColor2]
+    
     energyCards.forEach(card => {
       deck.push({
         ID: deckCardId++,
@@ -1129,11 +1450,20 @@ export const useGameStore = defineStore('game', () => {
     const deck: DeckCard[] = []
     let cardId = 0
     
+    // Choose two colors for the basic deck
+    const colors = ['赤', '青', '黄', '緑'] as CardColor[]
+    const firstColor = colors[Math.floor(Math.random() * colors.length)]
+    const remainingColors = colors.filter(c => c !== firstColor)
+    const secondColor = remainingColors[Math.floor(Math.random() * remainingColors.length)]
+    const deckColors = [firstColor, secondColor]
+    
+    console.log(`Basic CPU deck colors: ${firstColor} and ${secondColor}`)
+    
     // Create 50 basic cards with proper image paths
     for (let i = 0; i < 50; i++) {
       const cost = i < 20 ? 1 : i < 35 ? 2 : 3
       const power = cost * 1000
-      const color = ['赤', '青', '黄', '緑'][i % 4] as CardColor
+      const color = deckColors[i % 2] // Alternate between the two colors
       
       deck.push({
         ID: cardId++,
@@ -1177,6 +1507,40 @@ export const useGameStore = defineStore('game', () => {
     currentPlayer.value = 'player'
     turnCount.value = 0
     error.value = null
+    loading.value = false
+    battleActions.value = []
+    selectedAttacker.value = null
+    availableTargets.value = []
+    energyPlayedThisTurn.value = {player: false, opponent: false}
+    
+    // Reset decision states
+    blockingDecision.value = {
+      show: false,
+      attacker: { player: 'player', index: -1, card: null },
+      availableBlockers: [],
+      resolve: null
+    }
+    
+    counterDecision.value = {
+      show: false,
+      attacker: { player: 'player', index: -1, card: null },
+      blocker: null,
+      resolve: null
+    }
+    
+    energyCostSelection.value = {
+      show: false,
+      cardToPay: null,
+      resolve: null
+    }
+    
+    battleAnimation.value = {
+      show: false,
+      attacker: null,
+      defender: null,
+      attackerDefeated: false,
+      defenderDefeated: false
+    }
   }
 
   async function performBattle(attacker: 'player' | 'opponent', attackerIndex: number, targetIndex: number | 'player') {
@@ -1194,12 +1558,20 @@ export const useGameStore = defineStore('game', () => {
     // Tap the attacking card
     attackerFriend.tapped = true
     
+    // Trigger attack effects
+    await triggerCardEffect(attackerCard, 'on_attack', attacker)
+    
+    // Small delay to ensure effect animations are visible
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
     if (targetIndex === 'player') {
       // Direct attack on player - check if defender has untapped friends to block
       const defender = attacker === 'player' ? 'opponent' : 'player'
+      console.log(`Attack on player - attacker: ${attacker}, defender: ${defender}, battleMode: ${battleMode.value}`)
       const untappedFriends = defendingPlayer.friends
         .map((f, i) => ({ friend: f, index: i }))
         .filter(({ friend }) => !friend.tapped)
+      console.log(`Defender ${defender} has ${untappedFriends.length} untapped friends`)
       
       if (untappedFriends.length > 0 && defender === 'player') {
         // Ask player if they want to block
@@ -1211,10 +1583,15 @@ export const useGameStore = defineStore('game', () => {
           
           // Tap the blocking friend
           defendingPlayer.friends[blockerIndex].tapped = true
+          
+          // Trigger block effects
+          const blocker = defendingPlayer.friends[blockerIndex]
+          await triggerCardEffect(blocker.card.card, 'on_block', defender)
         }
       } else if (untappedFriends.length > 0 && defender === 'opponent') {
         // CPU blocking decision - check if beneficial to block
-        const blockerIndex = getCPUBlockingDecision(attackerFriend.card, untappedFriends)
+        console.log('CPU blocking opportunity - calling getCPUBlockingDecision')
+        const blockerIndex = getCPUBlockingDecision(attackerFriend, untappedFriends, attacker)
         
         if (blockerIndex !== null) {
           // CPU chose to block - redirect attack to the blocker
@@ -1223,6 +1600,12 @@ export const useGameStore = defineStore('game', () => {
           
           // Tap the blocking friend
           defendingPlayer.friends[blockerIndex].tapped = true
+          
+          // Trigger block effects
+          const blocker = defendingPlayer.friends[blockerIndex]
+          await triggerCardEffect(blocker.card.card, 'on_block', defender)
+        } else {
+          console.log('CPU decided not to block')
         }
       }
     }
@@ -1282,8 +1665,8 @@ export const useGameStore = defineStore('game', () => {
       }
       
       // Determine battle outcome after counter effects
-      const attackerPower = attackerFriend.card.card.power || 0
-      const defenderPower = targetFriend.card.card.power || 0
+      const attackerPower = getEffectivePower(attackerFriend, attacker)
+      const defenderPower = getEffectivePower(targetFriend, attacker === 'player' ? 'opponent' : 'player')
       const attackerDefeated = defenderPower >= attackerPower
       const defenderDefeated = attackerPower >= defenderPower
       
@@ -1330,11 +1713,26 @@ export const useGameStore = defineStore('game', () => {
   function selectBattleTarget(attackerIndex: number) {
     if (!gameState.value || !isPlayerTurn.value || currentPhase.value !== 'main') return
     
-    selectedAttacker.value = attackerIndex
+    const playerState = gameState.value.players.player
+    const friendState = playerState.friends[attackerIndex]
+    if (!friendState) return
     
-    // In this game, friends can only attack the player directly
-    // The opponent can choose to block with their friends
-    availableTargets.value = [-1] // -1 represents direct player attack
+    const cardNo = friendState.card.card.card_no
+    
+    // Check if this card has main phase effects
+    const mainPhaseEffectCards = ['F-002'] // なみだぶくろん
+    
+    if (mainPhaseEffectCards.includes(cardNo)) {
+      // Show action choice modal for cards with main phase effects
+      actionChoice.value = {
+        show: true,
+        friendIndex: attackerIndex,
+        friendState: friendState
+      }
+    } else {
+      // Directly perform the attack - attack effects will trigger automatically
+      performBattle('player', attackerIndex, 'player')
+    }
   }
   
   async function executeBattle(targetIndex: number | 'player') {
@@ -1343,6 +1741,93 @@ export const useGameStore = defineStore('game', () => {
     await performBattle('player', selectedAttacker.value, targetIndex)
     selectedAttacker.value = null
     availableTargets.value = []
+  }
+  
+  
+  function executeActionChoice(choice: 'attack' | 'main-effect') {
+    if (actionChoice.value.friendIndex === -1) return
+    
+    const friendIndex = actionChoice.value.friendIndex
+    
+    if (choice === 'attack') {
+      // Execute normal attack
+      performBattle('player', friendIndex, 'player')
+    } else {
+      // Execute main phase effect
+      showMainPhaseAction(friendIndex, actionChoice.value.friendState!)
+    }
+    
+    // Reset action choice
+    actionChoice.value = {
+      show: false,
+      friendIndex: -1,
+      friendState: null
+    }
+  }
+  
+  function cancelActionChoice() {
+    actionChoice.value = {
+      show: false,
+      friendIndex: -1,
+      friendState: null
+    }
+  }
+  
+  function showMainPhaseAction(friendIndex: number, friendState: FriendCardState) {
+    mainPhaseAction.value = {
+      show: true,
+      friendIndex: friendIndex,
+      friendState: friendState
+    }
+  }
+  
+  async function executeMainPhaseAction() {
+    if (mainPhaseAction.value.friendIndex === -1) return
+    
+    const friendIndex = mainPhaseAction.value.friendIndex
+    const playerState = gameState.value!.players.player
+    const friend = playerState.friends[friendIndex]
+    
+    if (friend) {
+      // Check if player has available energy
+      const availableEnergy = playerState.energy.filter(e => !e.tapped)
+      if (availableEnergy.length === 0) {
+        console.log('No available energy to pay for effect')
+        return
+      }
+      
+      // Tap one energy to pay for the effect
+      availableEnergy[0].tapped = true
+      
+      // Track temporary power boosts
+      if (!friend.temporaryBoosts) {
+        friend.temporaryBoosts = []
+      }
+      
+      // Add temporary boost for this turn
+      friend.temporaryBoosts.push({
+        amount: 1000,
+        duration: 'turn',
+        turnApplied: turnCount.value
+      })
+      
+      // Visual feedback - could add an effect animation here
+      console.log(`${friend.card.card.name} gained +1000 power for this turn!`)
+    }
+    
+    mainPhaseAction.value = {
+      show: false,
+      friendIndex: -1,
+      friendState: null
+    }
+  }
+  
+  function cancelMainPhaseAction() {
+    mainPhaseAction.value = {
+      show: false,
+      friendIndex: -1,
+      friendState: null
+    }
   }
   
   function setCPUDifficulty(difficulty: CPUDifficulty) {
@@ -1362,8 +1847,8 @@ export const useGameStore = defineStore('game', () => {
     // Shuffle deck
     playerState.deck = shuffleDeck(playerState.deck)
     
-    // Draw new hand
-    drawCards(player, 5)
+    // Draw new hand (without animation since it's during mulligan phase)
+    drawCards(player, 5, false)
   }
 
   async function getBlockingDecision(attacker: 'player' | 'opponent', attackerIndex: number, attackerCard: DeckCard): Promise<number | null> {
@@ -1432,12 +1917,14 @@ export const useGameStore = defineStore('game', () => {
   }
   
   function getCPUBlockingDecision(
-    attackerCard: DeckCard, 
-    untappedFriends: { friend: FriendCardState, index: number }[]
+    attackerFriend: FriendCardState, 
+    untappedFriends: { friend: FriendCardState, index: number }[],
+    attackingPlayer: 'player' | 'opponent'
   ): number | null {
-    const attackerPower = attackerCard.card.power || 0
+    // Calculate effective power of the attacker
+    const attackerPower = getEffectivePower(attackerFriend, attackingPlayer)
     
-    console.log('CPU blocking decision - Attacker:', attackerCard.card.name, 'Power:', attackerPower)
+    console.log('CPU blocking decision - Attacker:', attackerFriend.card.card.name, 'Power:', attackerPower)
     console.log('Available blockers:', untappedFriends.map(f => ({
       name: f.friend.card.card.name,
       power: f.friend.card.card.power,
@@ -1446,12 +1933,15 @@ export const useGameStore = defineStore('game', () => {
     
     // Analyze all possible blocking options
     const blockingOptions = untappedFriends.map(({ friend, index }) => {
-      const blockerPower = friend.card.card.power || 0
+      const blockerPower = getEffectivePower(friend, 'opponent') // CPU is always opponent
       
       // Calculate outcome
       const attackerDefeated = blockerPower >= attackerPower
       const blockerDefeated = attackerPower >= blockerPower
       const isMutualDestruction = attackerDefeated && blockerDefeated
+      
+      console.log(`Blocker ${friend.card.card.name} (${blockerPower}) vs Attacker (${attackerPower}):`,
+        { attackerDefeated, blockerDefeated, isMutualDestruction })
       
       return {
         index,
@@ -1467,6 +1957,7 @@ export const useGameStore = defineStore('game', () => {
     console.log('Blocking analysis:', blockingOptions)
     
     // Strategy based on CPU difficulty
+    console.log('CPU difficulty:', cpuDifficulty.value)
     switch (cpuDifficulty.value) {
       case 'easy':
         // Easy: 40% chance to block, sometimes seeks mutual destruction
@@ -1523,6 +2014,7 @@ export const useGameStore = defineStore('game', () => {
           console.log('CPU blocks to prevent damage')
           return blockingOptions[0].index
         }
+        console.log('CPU (normal) decides not to block - no beneficial options')
         return null
         
       case 'hard':
@@ -1626,6 +2118,7 @@ export const useGameStore = defineStore('game', () => {
   }
   
   function confirmEnergyCostSelection(selection: any) {
+    console.log('confirmEnergyCostSelection called with:', selection)
     if (energyCostSelection.value.resolve) {
       energyCostSelection.value.resolve(selection)
       energyCostSelection.value = {
@@ -1633,7 +2126,558 @@ export const useGameStore = defineStore('game', () => {
         cardToPay: null,
         resolve: null
       }
+      console.log('Energy selection confirmed and modal closed')
+    } else {
+      console.log('No resolve function found!')
     }
+  }
+  
+  // Effect-related methods
+  function updateEffects(update: EffectUpdate) {
+    effectUpdates.value = update
+    
+    if (update.stack) {
+      effectStack.value = update.stack
+    }
+    
+    if (update.persistent) {
+      persistentEffects.value = update.persistent
+    }
+  }
+  
+  function requestTargetSelection(
+    source: string,
+    targets: Array<{ type: string; id: string; location: string; data?: any }>,
+    requirements: {
+      minTargets: number
+      maxTargets: number
+      targetTypes: string[]
+      mandatory: boolean
+      description: string
+    },
+    callback: (targets: any[]) => void
+  ) {
+    targetSelection.value = {
+      effectSource: source,
+      validTargets: targets,
+      requirements,
+      callback
+    }
+  }
+  
+  function submitTargetSelection(targets: any[]) {
+    if (targetSelection.value?.callback) {
+      targetSelection.value.callback(targets)
+      targetSelection.value = null
+    }
+  }
+  
+  function cancelTargetSelection() {
+    if (targetSelection.value && !targetSelection.value.requirements.mandatory) {
+      targetSelection.value.callback([])
+      targetSelection.value = null
+    }
+  }
+  
+  function addToEffectStack(effect: EffectStackItem) {
+    effectStack.value.push(effect)
+  }
+  
+  function resolveTopEffect() {
+    if (effectStack.value.length > 0) {
+      effectStack.value.shift()
+    }
+  }
+  
+  function clearEffectStack() {
+    effectStack.value = []
+  }
+  
+  function updatePersistentEffects(effects: PersistentEffect[]) {
+    persistentEffects.value = effects
+  }
+  
+  // Trigger card effects based on the card data and trigger type
+  async function triggerCardEffect(card: Card, triggerType: string, player: 'player' | 'opponent') {
+    if (!card.effect) return
+    
+    // Add to effect stack
+    const effectItem: EffectStackItem = {
+      source: card.card_no,
+      description: card.effect,
+      player: player === 'player' ? 1 : 2
+    }
+    
+    addToEffectStack(effectItem)
+    
+    // Parse and execute effect
+    await executeCardEffect(card, triggerType, player)
+    
+    // Resolve effect from stack
+    resolveTopEffect()
+  }
+  
+  // Execute specific card effects based on card number
+  async function executeCardEffect(card: Card, triggerType: string, player: 'player' | 'opponent') {
+    const cardNo = card.card_no
+    
+    // Friend card effects
+    if (cardNo === 'F-006' || cardNo === 'F-006 (P)') {
+      // ヒヤケラトプス - When attacks, draw 1 card
+      if (triggerType === 'on_attack') {
+        await drawCards(player, 1)
+      }
+    } else if (cardNo === 'F-013' || cardNo === 'F-013 (P)') {
+      // るくそー - When blocks, reveal 1 negative energy
+      if (triggerType === 'on_block') {
+        await revealNegativeEnergy(player, 1)
+      }
+    } else if (cardNo === 'F-004' || cardNo === 'F-015' || cardNo === 'F-015 (P)') {
+      // ハシルシト/ティラノちゃん - Can attack on turn played
+      // This is a persistent effect, handled in attack validation
+    } else if (cardNo === 'F-023' || cardNo === 'F-023 (P)') {
+      // ユピ - When played, return 1 opponent's friend to hand
+      if (triggerType === 'on_play') {
+        await selectAndReturnOpponentFriend(player)
+      }
+    } else if (cardNo === 'F-055' || cardNo === 'F-055 (P)') {
+      // Ko2 - When attacks, rest 1 opponent's friend
+      if (triggerType === 'on_attack') {
+        await selectAndRestOpponentFriend(player)
+      }
+    } else if (cardNo === 'F-008' || cardNo === 'F-008 (P)') {
+      // ボーイ - When attacks, destroy 1 opponent's friend with power 3000 or less
+      if (triggerType === 'on_attack') {
+        await selectAndDestroyWeakFriend(player, 3000)
+      }
+    } else if (cardNo === 'F-011' || cardNo === 'F-011 (P)') {
+      // ポチ - When attacks, draw 1 card
+      if (triggerType === 'on_attack') {
+        await drawCards(player, 1)
+      }
+    } else if (cardNo === 'F-020' || cardNo === 'F-020 (P)') {
+      // マルカニ - When attacks, reveal top deck card and place on top or bottom
+      if (triggerType === 'on_attack') {
+        await revealAndPlaceDeckTop(player)
+      }
+    } else if (cardNo === 'F-022' || cardNo === 'F-022 (P)') {
+      // ジョニー - When attacks, discard top card of deck
+      if (triggerType === 'on_attack') {
+        await discardDeckTop(player)
+      }
+    } else if (cardNo === 'F-044' || cardNo === 'F-044 (P)') {
+      // うっきー - When attacks, may discard 1 negative energy
+      if (triggerType === 'on_attack') {
+        await selectAndDiscardNegativeEnergy(player)
+      }
+    } else if (cardNo === 'F-102') {
+      // くらげ坊(変身) - When attacks, turn 2 negative energy face down to activate this friend
+      if (triggerType === 'on_attack') {
+        await activateByFlippingNegativeEnergy(player, cardNo)
+      }
+    }
+    
+    // Support card effects
+    else if (cardNo === 'F-065' || cardNo === 'F-065 (P)') {
+      // バードン - +2000 power to one friend
+      await selectAndBoostFriend(player, 2000)
+    } else if (cardNo === 'F-066' || cardNo === 'F-066 (P)') {
+      // 正志とくらげ坊 - Draw 2, if you have くらげ坊, destroy enemy with 3000 or less power
+      await drawCards(player, 2)
+      if (hasKurageboOnField(player)) {
+        await selectAndDestroyWeakFriend(player, 3000)
+      }
+    } else if (cardNo === 'F-073') {
+      // 古池ダイビング - Return 1 friend to hand
+      await selectAndReturnAnyFriend(player)
+    }
+    
+    // Field card effects are persistent and handled elsewhere
+  }
+  
+  // Helper function to check if a friend can attack on the turn it was played
+  function canAttackImmediately(cardNo: string): boolean {
+    return cardNo === 'F-004' || cardNo === 'F-015' || cardNo === 'F-015 (P)'
+  }
+  
+  // Calculate the effective power of a friend including all boosts
+  function getEffectivePower(friendState: FriendCardState, player: 'player' | 'opponent'): number {
+    if (!gameState.value || !friendState.card.card) return 0
+    
+    const basePower = friendState.card.card.power || 0
+    let totalPower = basePower
+    
+    const cardNo = friendState.card.card.card_no
+    
+    // F-003 フラフラ - For every 2 cards in hand, +1000 power
+    if (cardNo === 'F-003') {
+      const handSize = gameState.value.players[player].hand.length
+      const powerBoost = Math.floor(handSize / 2) * 1000
+      totalPower += powerBoost
+    }
+    
+    // Add temporary boosts (like F-002 なみだぶくろん main phase effect)
+    if (friendState.temporaryBoosts) {
+      friendState.temporaryBoosts.forEach(boost => {
+        // Check if boost is still active
+        if (boost.duration === 'turn' && boost.turnApplied === turnCount.value) {
+          totalPower += boost.amount
+        } else if (boost.duration === 'permanent') {
+          totalPower += boost.amount
+        }
+      })
+    }
+    
+    return totalPower
+  }
+  
+  // Helper functions for effects
+  async function revealNegativeEnergy(player: 'player' | 'opponent', count: number) {
+    if (!gameState.value) return
+    
+    const playerState = gameState.value.players[player]
+    let revealed = 0
+    
+    for (let i = 0; i < playerState.negativeEnergy.length && revealed < count; i++) {
+      if (!playerState.negativeEnergy[i].faceUp) {
+        playerState.negativeEnergy[i].faceUp = true
+        revealed++
+      }
+    }
+  }
+  
+  async function selectAndReturnOpponentFriend(player: 'player' | 'opponent') {
+    if (!gameState.value) return
+    
+    const opponent = player === 'player' ? 'opponent' : 'player'
+    const oppState = gameState.value.players[opponent]
+    
+    if (oppState.friends.length === 0) return
+    
+    // For CPU, auto-select
+    if (player === 'opponent') {
+      const target = Math.floor(Math.random() * oppState.friends.length)
+      const friend = oppState.friends.splice(target, 1)[0]
+      oppState.hand.push(friend.card)
+      return
+    }
+    
+    // For player, show target selection and wait for completion
+    const targets = oppState.friends.map((f, idx) => ({
+      type: 'friend',
+      id: f.card.card.card_no,
+      location: `battle_area_${opponent}_${idx}`,
+      data: f
+    }))
+    
+    return new Promise<void>((resolve) => {
+      requestTargetSelection(
+        'F-023',
+        targets,
+        {
+          minTargets: 1,
+          maxTargets: 1,
+          targetTypes: ['friend'],
+          mandatory: true,
+          description: '相手のふれんど1体を手札に戻す'
+        },
+        (selected) => {
+          if (selected.length > 0) {
+            const idx = parseInt(selected[0].location.split('_').pop())
+            const friend = oppState.friends.splice(idx, 1)[0]
+            oppState.hand.push(friend.card)
+          }
+          resolve()
+        }
+      )
+    })
+  }
+  
+  async function selectAndRestOpponentFriend(player: 'player' | 'opponent') {
+    if (!gameState.value) return
+    
+    const opponent = player === 'player' ? 'opponent' : 'player'
+    const oppState = gameState.value.players[opponent]
+    
+    const activeFriends = oppState.friends.filter(f => !f.tapped)
+    if (activeFriends.length === 0) return
+    
+    // For CPU, auto-select
+    if (player === 'opponent') {
+      const target = activeFriends[Math.floor(Math.random() * activeFriends.length)]
+      target.tapped = true
+      return
+    }
+    
+    // For player, show target selection and wait for completion
+    const targets = oppState.friends
+      .map((f, idx) => ({ friend: f, index: idx }))
+      .filter(({ friend }) => !friend.tapped)
+      .map(({ friend, index }) => ({
+        type: 'friend',
+        id: friend.card.card.card_no,
+        location: `battle_area_${opponent}_${index}`,
+        data: friend
+      }))
+    
+    return new Promise<void>((resolve) => {
+      requestTargetSelection(
+        'F-055', 
+        targets,
+        {
+          minTargets: 1,
+          maxTargets: 1,
+          targetTypes: ['friend'],
+          mandatory: true,
+          description: '相手のふれんど1体をレストする'
+        },
+        (selected) => {
+          if (selected.length > 0) {
+            const idx = parseInt(selected[0].location.split('_').pop())
+            oppState.friends[idx].tapped = true
+          }
+          resolve()
+        }
+      )
+    })
+  }
+  
+  function hasKurageboOnField(player: 'player' | 'opponent'): boolean {
+    if (!gameState.value) return false
+    
+    const playerState = gameState.value.players[player]
+    return playerState.friends.some(f => 
+      f.card.card.card_no === 'F-016' || f.card.card.card_no === 'F-016 (P)'
+    )
+  }
+  
+  async function selectAndDestroyWeakFriend(player: 'player' | 'opponent', maxPower: number) {
+    if (!gameState.value) return
+    
+    const opponent = player === 'player' ? 'opponent' : 'player'
+    const oppState = gameState.value.players[opponent]
+    
+    const weakFriends = oppState.friends.filter(f => getEffectivePower(f, opponent) <= maxPower)
+    if (weakFriends.length === 0) return
+    
+    // For CPU, auto-select weakest
+    if (player === 'opponent') {
+      const target = weakFriends.reduce((min, f) => 
+        getEffectivePower(f, opponent) < getEffectivePower(min, opponent) ? f : min
+      )
+      const idx = oppState.friends.indexOf(target)
+      const defeated = oppState.friends.splice(idx, 1)[0]
+      oppState.graveyard.push(defeated.card)
+      return
+    }
+    
+    // For player, show target selection and wait for completion
+    const targets = oppState.friends
+      .map((f, idx) => ({ friend: f, index: idx }))
+      .filter(({ friend }) => getEffectivePower(friend, opponent) <= maxPower)
+      .map(({ friend, index }) => ({
+        type: 'friend',
+        id: friend.card.card.card_no,
+        location: `battle_area_${opponent}_${index}`,
+        data: friend
+      }))
+    
+    if (targets.length === 0) {
+      // No valid targets, effect fizzles
+      return
+    }
+    
+    return new Promise<void>((resolve) => {
+      requestTargetSelection(
+        'F-008',
+        targets,
+        {
+          minTargets: 1,
+          maxTargets: 1,
+          targetTypes: ['friend'],
+          mandatory: true,
+          description: `パワー${maxPower}以下の相手のふれんど1体を破壊する`
+        },
+        (selected) => {
+          if (selected.length > 0) {
+            const idx = parseInt(selected[0].location.split('_').pop())
+            const defeated = oppState.friends.splice(idx, 1)[0]
+            oppState.graveyard.push(defeated.card)
+          }
+          resolve()
+        }
+      )
+    })
+  }
+  
+  async function selectAndBoostFriend(player: 'player' | 'opponent', amount: number) {
+    // This would be implemented similarly to other target selections
+    // For now, it's a placeholder
+    console.log(`Boosting friend power by ${amount} for ${player}`)
+  }
+  
+  async function selectAndReturnAnyFriend(player: 'player' | 'opponent') {
+    // This would allow returning any friend (yours or opponent's)
+    console.log(`Returning any friend to hand for ${player}`)
+  }
+  
+  async function showDrawnCard(card: DeckCard) {
+    drawnCardDisplay.value = { show: true, card }
+    
+    // Wait for 2 seconds to show the card
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    drawnCardDisplay.value = { show: false, card: null }
+    
+    // Small delay before next card
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+  
+  async function revealAndPlaceDeckTop(player: 'player' | 'opponent') {
+    if (!gameState.value) return
+    
+    // For now, auto-place on top for CPU, show choice for player
+    const targetPlayer = player === 'player' ? 'player' : 'opponent'
+    const playerState = gameState.value.players[targetPlayer]
+    
+    if (playerState.deck.length === 0) return
+    
+    const topCard = playerState.deck[0]
+    console.log(`Revealed top card: ${topCard.card.name}`)
+    
+    // For CPU, randomly choose top or bottom
+    if (player === 'opponent') {
+      if (Math.random() < 0.5) {
+        // Already on top, do nothing
+        console.log('CPU places card on top')
+      } else {
+        // Move to bottom
+        playerState.deck.shift()
+        playerState.deck.push(topCard)
+        console.log('CPU places card on bottom')
+      }
+    }
+    // TODO: Implement player choice UI
+  }
+  
+  async function discardDeckTop(player: 'player' | 'opponent') {
+    if (!gameState.value) return
+    
+    const playerState = gameState.value.players[player]
+    if (playerState.deck.length === 0) return
+    
+    const discarded = playerState.deck.shift()!
+    playerState.graveyard.push(discarded)
+    console.log(`Discarded ${discarded.card.name} from deck top`)
+  }
+  
+  async function selectAndDiscardNegativeEnergy(player: 'player' | 'opponent') {
+    if (!gameState.value) return
+    
+    const playerState = gameState.value.players[player]
+    if (playerState.negativeEnergy.length === 0) return
+    
+    // For CPU, discard if beneficial (has 5+ negative energy)
+    if (player === 'opponent') {
+      if (playerState.negativeEnergy.length >= 5) {
+        playerState.negativeEnergy.shift()
+        console.log('CPU discarded 1 negative energy')
+      }
+      return
+    }
+    
+    // For player, show selection UI
+    const targets = playerState.negativeEnergy.map((ne, idx) => ({
+      type: 'negative_energy',
+      id: ne.card.card.card_no,
+      location: `negative_energy_${player}_${idx}`,
+      data: ne
+    }))
+    
+    requestTargetSelection(
+      'F-044',
+      targets,
+      {
+        minTargets: 0,
+        maxTargets: 1,
+        targetTypes: ['negative_energy'],
+        mandatory: false,
+        description: '負のエネルギー1枚を破棄できる'
+      },
+      (selected) => {
+        if (selected.length > 0) {
+          const idx = parseInt(selected[0].location.split('_').pop())
+          playerState.negativeEnergy.splice(idx, 1)
+        }
+      }
+    )
+  }
+  
+  async function activateByFlippingNegativeEnergy(player: 'player' | 'opponent', attackerCardNo: string) {
+    if (!gameState.value) return
+    
+    const playerState = gameState.value.players[player]
+    const faceUpNegative = playerState.negativeEnergy.filter(ne => ne.faceUp)
+    
+    if (faceUpNegative.length < 2) return
+    
+    // Find the attacking friend
+    const attackerIndex = playerState.friends.findIndex(f => f.card.card.card_no === attackerCardNo)
+    if (attackerIndex === -1) return
+    
+    // For CPU, auto-use if beneficial
+    if (player === 'opponent') {
+      // Use if there are multiple targets to attack
+      const playerFriends = gameState.value.players.player.friends
+      if (playerFriends.length >= 2) {
+        // Flip 2 face-up negative energy
+        let flipped = 0
+        for (let i = 0; i < playerState.negativeEnergy.length && flipped < 2; i++) {
+          if (playerState.negativeEnergy[i].faceUp) {
+            playerState.negativeEnergy[i].faceUp = false
+            flipped++
+          }
+        }
+        // Untap the attacker
+        playerState.friends[attackerIndex].tapped = false
+        console.log('CPU activated くらげ坊(変身) by flipping 2 negative energy')
+      }
+      return
+    }
+    
+    // For player, show selection UI
+    const targets = playerState.negativeEnergy
+      .map((ne, idx) => ({ ne, idx }))
+      .filter(({ ne }) => ne.faceUp)
+      .map(({ ne, idx }) => ({
+        type: 'negative_energy',
+        id: ne.card.card.card_no,
+        location: `negative_energy_${player}_${idx}`,
+        data: ne
+      }))
+    
+    requestTargetSelection(
+      'F-102',
+      targets,
+      {
+        minTargets: 2,
+        maxTargets: 2,
+        targetTypes: ['negative_energy'],
+        mandatory: false,
+        description: '負のエネルギー2枚を裏にしてこのふれんどをアクティブに'
+      },
+      (selected) => {
+        if (selected.length === 2) {
+          // Flip selected negative energy
+          selected.forEach(s => {
+            const idx = parseInt(s.location.split('_').pop())
+            playerState.negativeEnergy[idx].faceUp = false
+          })
+          // Untap the attacker
+          playerState.friends[attackerIndex].tapped = false
+        }
+      }
+    )
   }
 
   return {
@@ -1653,10 +2697,13 @@ export const useGameStore = defineStore('game', () => {
     isPlayerTurn,
     canPlayCards,
     battleAnimation,
+    drawnCardDisplay,
     blockingDecision,
     counterDecision,
     energyCostSelection,
-    energyPlayedThisTurn,
+    actionChoice,
+    mainPhaseAction,
+    energyPlayedThisTurn: computed(() => energyPlayedThisTurn.value),
     initializeGame,
     startGame,
     drawCards,
@@ -1675,6 +2722,26 @@ export const useGameStore = defineStore('game', () => {
     resolveCounter,
     getEnergyCostSelection,
     cancelEnergyCostSelection,
-    confirmEnergyCostSelection
+    confirmEnergyCostSelection,
+    // Effect-related exports
+    effectUpdates,
+    targetSelection,
+    effectStack,
+    persistentEffects,
+    updateEffects,
+    requestTargetSelection,
+    submitTargetSelection,
+    cancelTargetSelection,
+    addToEffectStack,
+    resolveTopEffect,
+    clearEffectStack,
+    updatePersistentEffects,
+    canAttackImmediately,
+    getEffectivePower,
+    executeActionChoice,
+    cancelActionChoice,
+    showMainPhaseAction,
+    executeMainPhaseAction,
+    cancelMainPhaseAction
   }
 })

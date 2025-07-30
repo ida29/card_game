@@ -55,7 +55,7 @@ func (s *DeckService) GetUserDecks(userID uint) ([]models.Deck, error) {
 
 func (s *DeckService) UpdateDeck(deck *models.Deck) error {
 	// Log incoming deck data
-	log.Printf("UpdateDeck called for deck ID %d with %d cards", deck.ID, len(deck.Cards))
+	log.Printf("UpdateDeck called for deck ID %d with %d cards, main_card_no=%s", deck.ID, len(deck.Cards), deck.MainCardNo)
 	for i, card := range deck.Cards {
 		log.Printf("  Card %d: CardNo=%s, Quantity=%d", i, card.CardNo, card.Quantity)
 	}
@@ -98,8 +98,12 @@ func (s *DeckService) UpdateDeck(deck *models.Deck) error {
 		}
 		log.Printf("Created %d new deck cards", len(deck.Cards))
 		
-		// Update deck info
-		return tx.Model(deck).Updates(deck).Error
+		// Update deck info including main_card_no
+		return tx.Model(deck).Updates(map[string]interface{}{
+			"name":         deck.Name,
+			"is_active":    deck.IsActive,
+			"main_card_no": deck.MainCardNo,
+		}).Error
 	})
 }
 

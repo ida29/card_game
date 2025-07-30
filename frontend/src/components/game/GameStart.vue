@@ -3,17 +3,39 @@
     <div class="bg-gray-800 rounded-lg p-8 max-w-6xl max-h-[90vh] w-full overflow-auto flex flex-col justify-center">
       <!-- Deck Shuffle Phase -->
       <div v-if="phase === 'shuffle'" class="text-center">
-        <h2 class="text-3xl font-bold text-white mb-6">ゲーム準備中</h2>
+        <h2 class="text-3xl font-bold text-white mb-6 animate-fade-in">ゲーム準備中</h2>
         <div class="max-w-2xl mx-auto">
           <div class="mb-8">
-            <div class="text-6xl mb-4 animate-pulse">🎴</div>
-            <p class="text-gray-300 mb-4">{{ shuffleMessage }}</p>
-            <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+            <!-- Animated card shuffle display -->
+            <div class="shuffle-container relative h-64 mb-8">
+              <!-- Multiple cards shuffling -->
               <div 
-                class="bg-gradient-to-r from-blue-500 to-purple-500 h-full transition-all duration-500"
-                :style="{ width: `${shuffleProgress}%` }"
-              />
+                v-for="i in 12" 
+                :key="i"
+                class="absolute card-shuffle"
+                :class="`card-${i}`"
+                :style="{
+                  animationDelay: `${(i - 1) * 0.1}s`,
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)'
+                }"
+              >
+                <div class="w-20 h-28 bg-gradient-to-br from-gray-600 to-gray-800 rounded-lg shadow-2xl border-2 border-gray-500">
+                  <div class="w-full h-full flex items-center justify-center">
+                    <span class="text-gray-500 text-3xl">?</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Central glow effect -->
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="w-32 h-32 bg-purple-500 rounded-full opacity-30 animate-pulse-glow blur-xl"></div>
+              </div>
             </div>
+            
+            <p class="text-gray-300 mb-4 animate-fade-in">{{ shuffleMessage }}</p>
+            
           </div>
         </div>
       </div>
@@ -335,23 +357,28 @@ const selectTurnOrder = (order: 'first' | 'second') => {
 
 const startShuffleAnimation = () => {
   shuffleProgress.value = 0
-  const shuffleInterval = setInterval(() => {
-    shuffleProgress.value += 10
+  shuffleMessage.value = 'デッキをシャッフル中...'
+  
+  // Wait for animation to complete (3s + some buffer)
+  setTimeout(() => {
+    shuffleMessage.value = 'シャッフル完了！'
     
-    if (shuffleProgress.value >= 100) {
-      clearInterval(shuffleInterval)
-      shuffleMessage.value = 'シャッフル完了！'
-      
-      // Move to drawing phase
-      setTimeout(() => {
-        phase.value = 'drawing'
-        startDrawingAnimation()
-      }, 1000)
-    }
-  }, 100)
+    // Move to drawing phase
+    setTimeout(() => {
+      phase.value = 'drawing'
+      startDrawingAnimation()
+    }, 1000)
+  }, 3500)
 }
 
 onMounted(() => {
+  // Check if game is properly initialized
+  if (!gameStore.gameState) {
+    console.error('GameStart: No game state found')
+    emit('game-ready') // Skip to prevent getting stuck
+    return
+  }
+  
   // Reset game state
   gameStore.turnCount = 0
   
@@ -361,6 +388,96 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Card shuffle animation */
+@keyframes shuffleCard {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) translateX(0);
+    opacity: 0.8;
+  }
+  25% {
+    transform: translate(-50%, -50%) rotate(180deg) translateX(150px) scale(1.1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(360deg) translateX(0) translateY(-100px) scale(0.9);
+    opacity: 0.8;
+  }
+  75% {
+    transform: translate(-50%, -50%) rotate(540deg) translateX(-150px) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(720deg) translateX(0);
+    opacity: 0.8;
+  }
+}
+
+.card-shuffle {
+  animation: shuffleCard 3s ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+/* Different paths for each card */
+.card-1 { animation-duration: 2.8s; }
+.card-2 { animation-duration: 3.2s; animation-direction: reverse; }
+.card-3 { animation-duration: 2.6s; }
+.card-4 { animation-duration: 3.4s; animation-direction: reverse; }
+.card-5 { animation-duration: 2.9s; }
+.card-6 { animation-duration: 3.1s; animation-direction: reverse; }
+.card-7 { animation-duration: 2.7s; }
+.card-8 { animation-duration: 3.3s; animation-direction: reverse; }
+.card-9 { animation-duration: 2.5s; }
+.card-10 { animation-duration: 3.5s; animation-direction: reverse; }
+.card-11 { animation-duration: 2.8s; }
+.card-12 { animation-duration: 3.2s; animation-direction: reverse; }
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out;
+}
+
+/* Pulse glow animation */
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.shimmer {
+  animation: shimmer 2s linear infinite;
+}
+
+/* Card draw animation (existing) */
 @keyframes cardDraw {
   0% {
     transform: translateY(-100px) rotate(-20deg);

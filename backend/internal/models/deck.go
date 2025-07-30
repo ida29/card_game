@@ -6,10 +6,11 @@ import (
 
 type Deck struct {
 	gorm.Model
-	Name     string     `json:"name"`
-	UserID   uint       `json:"user_id"`
-	Cards    []DeckCard `json:"cards"`
-	IsActive bool       `json:"is_active"`
+	Name       string     `json:"name"`
+	UserID     uint       `json:"user_id"`
+	Cards      []DeckCard `json:"cards"`
+	IsActive   bool       `json:"is_active"`
+	MainCardNo string     `json:"main_card_no"` // The main card to display as deck thumbnail
 }
 
 type DeckCard struct {

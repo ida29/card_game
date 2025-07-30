@@ -102,12 +102,35 @@
           @click="selectDeck(deck)"
           class="bg-gray-800 hover:bg-gray-700 rounded-lg p-4 cursor-pointer transition-colors"
         >
-          <div class="flex justify-between items-center">
-            <div>
+          <div class="flex items-center gap-4">
+            <!-- Main card thumbnail -->
+            <div class="flex-shrink-0">
+              <div class="relative w-16 h-20">
+                <!-- Stacked cards effect -->
+                <div class="absolute inset-0 bg-gray-700 rounded transform rotate-3 translate-x-0.5"></div>
+                <div class="absolute inset-0 bg-gray-600 rounded transform -rotate-2 -translate-x-0.5"></div>
+                <!-- Main card -->
+                <div class="absolute inset-0">
+                  <img 
+                    v-if="getMainCardImage(deck)"
+                    :src="getMainCardImage(deck)"
+                    :alt="deck.name"
+                    class="w-full h-full object-cover rounded shadow-lg"
+                  />
+                  <div v-else class="w-full h-full bg-gray-500 rounded flex items-center justify-center">
+                    <span class="text-gray-300 text-xl">?</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Deck info -->
+            <div class="flex-grow">
               <h3 class="text-lg font-bold text-white">{{ deck.name }}</h3>
               <p class="text-sm text-gray-400">{{ getDeckCardCount(deck) }}枚</p>
             </div>
-            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            
+            <svg class="w-6 h-6 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -126,7 +149,17 @@
     
     <div v-else-if="gameMode === 'battle'">
       <GameStart v-if="!gameReady" @game-ready="handleGameReady" />
-      <BattleField v-else />
+      <template v-else>
+        <BattleField />
+        <EffectDisplay />
+        <TargetSelector 
+          v-if="gameStore.targetSelection"
+          :targets="gameStore.targetSelection.validTargets"
+          :requirements="gameStore.targetSelection.requirements"
+          @confirm="handleTargetConfirm"
+          @cancel="handleTargetCancel"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -136,9 +169,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useDeckStore } from '@/stores/decks'
 import { useGameStore } from '@/stores/game'
 import { useCardStore } from '@/stores/cards'
-import type { Deck, DeckCard } from '@/types'
+import type { Deck, DeckCard, Card } from '@/types'
 import BattleField from '@/components/game/BattleField.vue'
 import GameStart from '@/components/game/GameStart.vue'
+import EffectDisplay from '@/components/game/EffectDisplay.vue'
+import TargetSelector from '@/components/game/TargetSelector.vue'
 
 const deckStore = useDeckStore()
 const gameStore = useGameStore()
@@ -168,6 +203,15 @@ const availableDecks = computed(() => {
 })
 
 onMounted(async () => {
+  // Reset any existing game state when mounting this view
+  gameStore.resetGame()
+  
+  // Reset local component state
+  gameMode.value = null
+  battleMode.value = null
+  selectedDeck.value = null
+  gameReady.value = false
+  
   await deckStore.loadDecks()
   // Load all cards for CPU deck generation
   await cardStore.fetchAllCards()
@@ -231,5 +275,43 @@ const handleGameReady = () => {
   gameStore.startGame()
   gameReady.value = true
   console.log('Game ready set to true, should now show BattleField')
+}
+
+const getCardImageUrl = (card: Card) => {
+  if (card.local_image_path) {
+    return `/api/v1/images/${card.local_image_path.replace('card_images/', '')}`
+  }
+  return card.image_url || '/placeholder-card.jpg'
+}
+
+const getMainCardImage = (deck: Deck): string | null => {
+  if (!deck.cards || deck.cards.length === 0) {
+    return null
+  }
+  
+  // If main_card_no is set, try to find that card
+  if (deck.main_card_no) {
+    const mainCard = deck.cards.find(dc => dc.card_no === deck.main_card_no)
+    if (mainCard?.card) {
+      return getCardImageUrl(mainCard.card)
+    }
+  }
+  
+  // For existing decks without main_card_no, use the first card as fallback
+  // This maintains visual consistency for older decks
+  const firstCard = deck.cards[0]
+  if (firstCard?.card) {
+    return getCardImageUrl(firstCard.card)
+  }
+  
+  return null
+}
+
+const handleTargetConfirm = (targets: any[]) => {
+  gameStore.submitTargetSelection(targets)
+}
+
+const handleTargetCancel = () => {
+  gameStore.cancelTargetSelection()
 }
 </script>

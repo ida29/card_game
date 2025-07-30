@@ -41,6 +41,9 @@ export interface Deck {
   user_id: number
   cards: DeckCard[]
   is_active: boolean
+  main_card_no?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface GameState {

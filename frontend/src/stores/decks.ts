@@ -37,7 +37,28 @@ export const useDeckStore = defineStore('decks', () => {
     loading.value = true
     error.value = null
     try {
-      decks.value = await deckService.getUserDecks()
+      const fetchedDecks = await deckService.getUserDecks()
+      
+      // Ensure card data is populated for API-fetched decks
+      const cardStore = useCardStore()
+      if (cardStore.cards.length === 0) {
+        await cardStore.fetchAllCards()
+      }
+      
+      for (const deck of fetchedDecks) {
+        if (deck.cards) {
+          for (const deckCard of deck.cards) {
+            if (!deckCard.card || !deckCard.card.name) {
+              const fullCard = cardStore.cards.find(c => c.card_no === deckCard.card_no)
+              if (fullCard) {
+                deckCard.card = fullCard
+              }
+            }
+          }
+        }
+      }
+      
+      decks.value = fetchedDecks
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch decks'
     } finally {
@@ -50,8 +71,29 @@ export const useDeckStore = defineStore('decks', () => {
     error.value = null
     try {
       currentDeck.value = await deckService.getDeck(id)
+      // Don't automatically modify main_card_no - let the user explicitly set it
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch deck'
+      // Try to load from local storage as fallback
+      const localDeck = decks.value.find(d => d.ID === id)
+      if (localDeck) {
+        currentDeck.value = JSON.parse(JSON.stringify(localDeck)) // Deep copy
+        
+        // Ensure card data is populated
+        const cardStore = useCardStore()
+        if (currentDeck.value && currentDeck.value.cards) {
+          for (const deckCard of currentDeck.value.cards) {
+            if (!deckCard.card || !deckCard.card.name) {
+              const fullCard = cardStore.cards.find(c => c.card_no === deckCard.card_no)
+              if (fullCard) {
+                deckCard.card = fullCard
+              }
+            }
+          }
+        }
+        
+        // Don't automatically modify main_card_no - let the user explicitly set it
+      }
     } finally {
       loading.value = false
     }
@@ -99,18 +141,28 @@ export const useDeckStore = defineStore('decks', () => {
     error.value = null
     try {
       console.log('Updating deck with cards:', deck.cards.length)
+      console.log('Main card no:', deck.main_card_no)
       deck.cards.forEach((card, idx) => {
         console.log(`Card ${idx}: ${card.card_no} x${card.quantity}`)
       })
       
       const updatedDeck = await deckService.updateDeck(deck.ID, deck)
       console.log('Received updated deck with cards:', updatedDeck.cards.length)
+      console.log('Received main card no:', updatedDeck.main_card_no)
       
       const index = decks.value.findIndex(d => d.ID === deck.ID)
       if (index !== -1) {
+        // Preserve the main_card_no from the input deck if it exists
+        if (deck.main_card_no && !updatedDeck.main_card_no) {
+          updatedDeck.main_card_no = deck.main_card_no
+        }
         decks.value[index] = updatedDeck
       }
       if (currentDeck.value?.ID === deck.ID) {
+        // Preserve the main_card_no from the input deck if it exists
+        if (deck.main_card_no && !updatedDeck.main_card_no) {
+          updatedDeck.main_card_no = deck.main_card_no
+        }
         currentDeck.value = updatedDeck
       }
       // Save to localStorage
@@ -126,7 +178,8 @@ export const useDeckStore = defineStore('decks', () => {
         if (currentDeck.value?.ID === deck.ID) {
           currentDeck.value = { ...deck }
         }
-        // Save to localStorage
+        // Save to localStorage with main_card_no
+        console.log('Saving to localStorage with main_card_no:', deck.main_card_no)
         localStorage.setItem('mememe_decks', JSON.stringify(decks.value))
         return deck
       }
@@ -237,6 +290,29 @@ export const useDeckStore = defineStore('decks', () => {
       if (savedDecks) {
         const parsedDecks = JSON.parse(savedDecks)
         console.log('Loaded decks from localStorage:', parsedDecks)
+        
+        // Populate card data for each deck card
+        const cardStore = useCardStore()
+        // Ensure cards are loaded
+        if (cardStore.cards.length === 0) {
+          await cardStore.fetchAllCards()
+        }
+        
+        // Populate card data for each deck
+        for (const deck of parsedDecks) {
+          if (deck.cards) {
+            for (const deckCard of deck.cards) {
+              if (!deckCard.card || !deckCard.card.name) {
+                // Find the full card data
+                const fullCard = cardStore.cards.find(c => c.card_no === deckCard.card_no)
+                if (fullCard) {
+                  deckCard.card = fullCard
+                }
+              }
+            }
+          }
+        }
+        
         decks.value = parsedDecks
       }
       

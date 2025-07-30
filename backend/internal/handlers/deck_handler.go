@@ -95,7 +95,7 @@ func (h *DeckHandler) UpdateDeck(c *gin.Context) {
 	}
 
 	// Log the incoming request
-	log.Printf("UpdateDeck handler received deck ID %d with %d cards", deckID, len(deck.Cards))
+	log.Printf("UpdateDeck handler received deck ID %d with %d cards, main_card_no=%s", deckID, len(deck.Cards), deck.MainCardNo)
 
 	deck.ID = uint(deckID)
 	if err := h.deckService.UpdateDeck(&deck); err != nil {

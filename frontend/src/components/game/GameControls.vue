@@ -36,7 +36,7 @@ import { computed } from 'vue'
 const props = defineProps<{
   currentPhase: string
   canEndTurn: boolean
-  energyPlayedThisTurn: { player: boolean, opponent: boolean }
+  energyPlayedThisTurn?: { player: boolean, opponent: boolean }
 }>()
 
 const emit = defineEmits<{

@@ -51,8 +51,11 @@
         </div>
         
         <!-- Card Footer -->
-        <div v-if="card.power" class="card-footer text-center mt-1">
-          <span class="power text-red-400 font-bold text-sm bg-black/60 rounded px-2">{{ card.power }}</span>
+        <div v-if="card.power || effectivePower" class="card-footer text-center mt-1">
+          <span class="power font-bold text-sm bg-black/60 rounded px-2"
+                :class="effectivePower && effectivePower > (card.power || 0) ? 'text-green-400' : 'text-red-400'">
+            {{ effectivePower || card.power }}
+          </span>
         </div>
       </div>
     </div>
@@ -70,6 +73,7 @@ const props = defineProps<{
   selected?: boolean
   tapped?: boolean
   showEnergyValue?: boolean
+  effectivePower?: number
 }>()
 
 const sizeClass = computed(() => {
